@@ -5,6 +5,12 @@ extern char board[8][8];
 extern int move_count;
 extern int halfmove_clock;
 
+// Castling rights trackers
+extern int white_castle_k;
+extern int white_castle_q;
+extern int black_castle_k;
+extern int black_castle_q;
+
 typedef struct {
     int src_r, src_c;
     int dst_r, dst_c;

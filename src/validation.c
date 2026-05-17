@@ -23,6 +23,81 @@ void add_move(MoveList* list, int sr, int sc, int dr, int dc) {
     }
 }
 
+// checks if a square is attacked by the enemy - used for check detection and castling validation
+int is_square_attacked(int r, int c, int attacker_is_white) {
+    // 1. Check Enemy Knights
+    int kr[] = {-2, -2, -1, -1, 1, 1, 2, 2};
+    int kc[] = {-1, 1, -2, 2, -2, 2, -1, 1};
+    for(int i = 0; i < 8; i++) {
+        int nr = r + kr[i], nc = c + kc[i];
+        if(nr >= 0 && nr < 8 && nc >= 0 && nc < 8) {
+            char p = board[nr][nc];
+            if(p != '.' && is_own(p, attacker_is_white) && (p == 'N' || p == 'n')) return 1;
+        }
+    }
+    
+    // 2. Check Enemy Pawns (They attack "backwards" relative to their movement direction)
+    int pawn_dir = attacker_is_white ? 1 : -1; 
+    int pr = r + pawn_dir;
+    if (pr >= 0 && pr < 8) {
+        if (c - 1 >= 0) {
+            char p = board[pr][c-1];
+            if (p != '.' && is_own(p, attacker_is_white) && (p == 'P' || p == 'p')) return 1;
+        }
+        if (c + 1 < 8) {
+            char p = board[pr][c+1];
+            if (p != '.' && is_own(p, attacker_is_white) && (p == 'P' || p == 'p')) return 1;
+        }
+    }
+    
+    // 3. Check Enemy King (For adjacency logic)
+    int dr[] = {-1, 1, 0, 0, -1, -1, 1, 1}; // 0-3 Orthogonal, 4-7 Diagonal
+    int dc[] = {0, 0, -1, 1, -1, 1, -1, 1};
+    for(int i = 0; i < 8; i++) {
+        int nr = r + dr[i], nc = c + dc[i];
+        if(nr >= 0 && nr < 8 && nc >= 0 && nc < 8) {
+            char p = board[nr][nc];
+            if(p != '.' && is_own(p, attacker_is_white) && (p == 'K' || p == 'k')) return 1;
+        }
+    }
+    
+    // 4. Check Enemy Sliding Pieces (Rooks, Bishops, Queens)
+    for(int i = 0; i < 8; i++) {
+        int nr = r, nc = c;
+        while(1) {
+            nr += dr[i]; nc += dc[i];
+            if(nr < 0 || nr >= 8 || nc < 0 || nc >= 8) break;
+            char p = board[nr][nc];
+            if(p != '.') {
+                if(is_own(p, attacker_is_white)) {
+                    char up = p;
+                    if (up >= 'a' && up <= 'z') up -= 32; // Convert to uppercase for check
+                    if(up == 'Q') return 1;
+                    if(i < 4 && up == 'R') return 1;  // Orthogonal = Rook
+                    if(i >= 4 && up == 'B') return 1; // Diagonal = Bishop
+                }
+                break; // Blocked by own or enemy piece
+            }
+        }
+    }
+    return 0;
+}
+
+// Checks if current player's King is in check
+int is_in_check(int is_white) {
+    int kr = -1, kc = -1;
+    char king_char = is_white ? 'K' : 'k';
+    
+    for (int r = 0; r < 8; r++) {
+        for (int c = 0; c < 8; c++) {
+            if (board[r][c] == king_char) { kr = r; kc = c; break; }
+        }
+        if (kr != -1) break;
+    }
+    if (kr == -1) return 0; 
+
+    return is_square_attacked(kr, kc, !is_white);
+}
 // Generates moves assuming the King is perfectly safe (Ignores checks)
 void get_pseudo_legal_moves(int is_white, MoveList* move_list) {
     move_list->count = 0;
@@ -80,34 +155,37 @@ void get_pseudo_legal_moves(int is_white, MoveList* move_list) {
                         if (is_king) break; 
                     }
                 }
+
+                // Castling Logic
+                if (piece == 'K') { // White King
+                    if (white_castle_k && board[7][5] == '.' && board[7][6] == '.') {
+                        if (!is_square_attacked(7, 4, 0) && !is_square_attacked(7, 5, 0) && !is_square_attacked(7, 6, 0)) {
+                            add_move(move_list, 7, 4, 7, 6);
+                        }
+                    }
+                    if (white_castle_q && board[7][1] == '.' && board[7][2] == '.' && board[7][3] == '.') {
+                        if (!is_square_attacked(7, 4, 0) && !is_square_attacked(7, 3, 0) && !is_square_attacked(7, 2, 0)) {
+                            add_move(move_list, 7, 4, 7, 2);
+                        }
+                    }
+                } 
+                else if (piece == 'k') { // Black King
+                    if (black_castle_k && board[0][5] == '.' && board[0][6] == '.') {
+                        if (!is_square_attacked(0, 4, 1) && !is_square_attacked(0, 5, 1) && !is_square_attacked(0, 6, 1)) {
+                            add_move(move_list, 0, 4, 0, 6);
+                        }
+                    }
+                    if (black_castle_q && board[0][1] == '.' && board[0][2] == '.' && board[0][3] == '.') {
+                        if (!is_square_attacked(0, 4, 1) && !is_square_attacked(0, 3, 1) && !is_square_attacked(0, 2, 1)) {
+                            add_move(move_list, 0, 4, 0, 2);
+                        }
+                    }
+                }
             }
         }
     }
 }
-// Checks if current player is in check after a move
-int is_in_check(int is_white) {
-    int kr = -1, kc = -1;
-    char king_char = is_white ? 'K' : 'k';
-    
-    for (int r = 0; r < 8; r++) {
-        for (int c = 0; c < 8; c++) {
-            if (board[r][c] == king_char) { kr = r; kc = c; break; }
-        }
-        if (kr != -1) break;
-    }
-    if (kr == -1) return 0; 
-
-    MoveList enemy_moves;
-    get_pseudo_legal_moves(!is_white, &enemy_moves);
-    for (int i = 0; i < enemy_moves.count; i++) {
-        if (enemy_moves.moves[i].dst_r == kr && enemy_moves.moves[i].dst_c == kc) {
-            return 1;
-        }
-    }
-    return 0;
-}
-
-// Filters pseudo-legal moves. Only keeps moves where your King survives.
+// get all legal moves
 void get_legal_moves(int is_white, MoveList* move_list) {
     MoveList pseudo;
     get_pseudo_legal_moves(is_white, &pseudo);

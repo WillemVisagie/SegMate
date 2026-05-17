@@ -1,11 +1,18 @@
 // chess.c - Core chess logic implementation
 #include <stdio.h>
+#include <stdlib.h>
 #include "chess.h"
 
 char board[8][8];
 char history[512][8][8]; 
 int move_count = 0;
 int halfmove_clock = 0;
+
+int white_castle_k = 1;
+int white_castle_q = 1;
+int black_castle_k = 1;
+int black_castle_q = 1;
+
 // Stores the current board state in the history array for threefold repetition checking.
 void store_board() {
     if (move_count >= 512) return; 
@@ -53,6 +60,10 @@ void init_board() {
     }
     move_count = 0;
     halfmove_clock = 0;
+    
+    white_castle_k = 1; white_castle_q = 1;
+    black_castle_k = 1; black_castle_q = 1;
+    
     store_board(); 
 }
 // prints board
@@ -71,18 +82,63 @@ void print_board() {
 // Makes moves and returns captured piece (or '.' if none)
 char execute_move_with_capture(Move m) {
     char cap = board[m.dst_r][m.dst_c];
-    board[m.dst_r][m.dst_c] = board[m.src_r][m.src_c];
+    char moving = board[m.src_r][m.src_c];
+    
+    board[m.dst_r][m.dst_c] = moving;
     board[m.src_r][m.src_c] = '.';
+
+    // Physically move the Rook if this is a Castling move
+    if ((moving == 'K' || moving == 'k') && abs(m.src_c - m.dst_c) == 2) {
+        if (m.dst_c == 6) { // Kingside
+            board[m.src_r][5] = board[m.src_r][7];
+            board[m.src_r][7] = '.';
+        } else if (m.dst_c == 2) { // Queenside
+            board[m.src_r][3] = board[m.src_r][0];
+            board[m.src_r][0] = '.';
+        }
+    }
+
     return cap;
 }
 //undoes a move - for move legality
 void undo_move(Move m, char captured_piece) {
-    board[m.src_r][m.src_c] = board[m.dst_r][m.dst_c];
+    char moving = board[m.dst_r][m.dst_c];
+    board[m.src_r][m.src_c] = moving;
     board[m.dst_r][m.dst_c] = captured_piece;
+
+    // Undo the Rook movement if it was a Castling move
+    if ((moving == 'K' || moving == 'k') && abs(m.src_c - m.dst_c) == 2) {
+        if (m.dst_c == 6) { // Kingside
+            board[m.src_r][7] = board[m.src_r][5];
+            board[m.src_r][5] = '.';
+        } else if (m.dst_c == 2) { // Queenside
+            board[m.src_r][0] = board[m.src_r][3];
+            board[m.src_r][3] = '.';
+        }
+    }
 }
 // actually makes move
 void execute_move(Move m) {
     char moving_piece = board[m.src_r][m.src_c];
+    
+    // Revoke castling rights if King or Rooks move
+    if (moving_piece == 'K') { white_castle_k = 0; white_castle_q = 0; }
+    if (moving_piece == 'k') { black_castle_k = 0; black_castle_q = 0; }
+    if (moving_piece == 'R') {
+        if (m.src_r == 7 && m.src_c == 0) white_castle_q = 0;
+        if (m.src_r == 7 && m.src_c == 7) white_castle_k = 0;
+    }
+    if (moving_piece == 'r') {
+        if (m.src_r == 0 && m.src_c == 0) black_castle_q = 0;
+        if (m.src_r == 0 && m.src_c == 7) black_castle_k = 0;
+    }
+    
+    // Revoke castling rights if a Rook is captured in its corner
+    if (m.dst_r == 7 && m.dst_c == 0) white_castle_q = 0;
+    if (m.dst_r == 7 && m.dst_c == 7) white_castle_k = 0;
+    if (m.dst_r == 0 && m.dst_c == 0) black_castle_q = 0;
+    if (m.dst_r == 0 && m.dst_c == 7) black_castle_k = 0;
+
     char captured = execute_move_with_capture(m);
     
     // 50 move rule draw
