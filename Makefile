@@ -1,12 +1,19 @@
 # Compiler settings
 CC = gcc
-CFLAGS = -Wall -Wextra -O3
+# -Isrc and -I. tell the compiler to look for .h files in src/ and the root directory
+CFLAGS = -Wall -Wextra -O3 -Isrc -I.
 
 # Directories
+SRC_DIR = src
 BIN_DIR = bin
 
+# Target executable
 TARGET = $(BIN_DIR)/segmate
-OBJS = $(BIN_DIR)/chess.o $(BIN_DIR)/referee.o $(BIN_DIR)/validation.o $(BIN_DIR)/randommove.o
+
+# Source files and Object files
+# Automatically maps src/file.c to bin/file.o
+SRCS = $(SRC_DIR)/chess.c $(SRC_DIR)/referee.c $(SRC_DIR)/validation.c $(SRC_DIR)/randommove.c
+OBJS = $(patsubst $(SRC_DIR)/%.c, $(BIN_DIR)/%.o, $(SRCS))
 
 # Default target
 all: $(TARGET)
@@ -15,18 +22,9 @@ all: $(TARGET)
 $(TARGET): $(OBJS) | $(BIN_DIR)
 	$(CC) $(CFLAGS) -o $(TARGET) $(OBJS)
 
-# Compile C files directly into the bin/ folder
-$(BIN_DIR)/chess.o: chess.c chess.h | $(BIN_DIR)
-	$(CC) $(CFLAGS) -c chess.c -o $@
-
-$(BIN_DIR)/validation.o: validation.c validation.h chess.h | $(BIN_DIR)
-	$(CC) $(CFLAGS) -c validation.c -o $@
-
-$(BIN_DIR)/randommove.o: randommove.c randommove.h validation.h chess.h | $(BIN_DIR)
-	$(CC) $(CFLAGS) -c randommove.c -o $@
-
-$(BIN_DIR)/referee.o: referee.c referee.h chess.h validation.h randommove.h | $(BIN_DIR)
-	$(CC) $(CFLAGS) -c referee.c -o $@
+# Pattern rule: Compile ANY .c file in src/ to a .o file in bin/
+$(BIN_DIR)/%.o: $(SRC_DIR)/%.c | $(BIN_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
 
 # Rules to create directories
 $(BIN_DIR):
