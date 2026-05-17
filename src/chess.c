@@ -8,10 +8,11 @@ char history[512][8][8];
 int move_count = 0;
 int halfmove_clock = 0;
 
-int white_castle_k = 1;
-int white_castle_q = 1;
-int black_castle_k = 1;
-int black_castle_q = 1;
+int white_castle_k = 1; int white_castle_q = 1;
+int black_castle_k = 1; int black_castle_q = 1;
+
+int ep_target_r = -1;
+int ep_target_c = -1;
 
 // Stores the current board state in the history array for threefold repetition checking.
 void store_board() {
@@ -63,6 +64,7 @@ void init_board() {
     
     white_castle_k = 1; white_castle_q = 1;
     black_castle_k = 1; black_castle_q = 1;
+    ep_target_r = -1; ep_target_c = -1;
     
     store_board(); 
 }
@@ -84,6 +86,12 @@ char execute_move_with_capture(Move m) {
     char cap = board[m.dst_r][m.dst_c];
     char moving = board[m.src_r][m.src_c];
     
+    // Check if this is an En Passant capture
+    if ((moving == 'P' || moving == 'p') && m.dst_r == ep_target_r && m.dst_c == ep_target_c) {
+        cap = board[m.src_r][m.dst_c]; // The captured pawn is horizontally adjacent
+        board[m.src_r][m.dst_c] = '.'; // Remove the enemy pawn
+    }
+    
     board[m.dst_r][m.dst_c] = moving;
     board[m.src_r][m.src_c] = '.';
 
@@ -104,7 +112,14 @@ char execute_move_with_capture(Move m) {
 void undo_move(Move m, char captured_piece) {
     char moving = board[m.dst_r][m.dst_c];
     board[m.src_r][m.src_c] = moving;
-    board[m.dst_r][m.dst_c] = captured_piece;
+    
+    // Undo En Passant specific logic
+    if ((moving == 'P' || moving == 'p') && m.dst_r == ep_target_r && m.dst_c == ep_target_c) {
+        board[m.dst_r][m.dst_c] = '.'; // The destination square was actually empty
+        board[m.src_r][m.dst_c] = captured_piece; // Restore enemy pawn beside us
+    } else {
+        board[m.dst_r][m.dst_c] = captured_piece; // Normal capture restore
+    }
 
     // Undo the Rook movement if it was a Castling move
     if ((moving == 'K' || moving == 'k') && abs(m.src_c - m.dst_c) == 2) {
@@ -146,6 +161,17 @@ void execute_move(Move m) {
         halfmove_clock = 0;
     } else {
         halfmove_clock++;
+    }
+
+    // Update En Passant Target state for nextturn
+    ep_target_r = -1;
+    ep_target_c = -1;
+    if (moving_piece == 'P' && m.src_r - m.dst_r == 2) {
+        ep_target_r = m.src_r - 1; // Square behind the white pawn
+        ep_target_c = m.src_c;
+    } else if (moving_piece == 'p' && m.dst_r - m.src_r == 2) {
+        ep_target_r = m.src_r + 1; // Square behind the black pawn
+        ep_target_c = m.src_c;
     }
 
     store_board(); 

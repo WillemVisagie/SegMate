@@ -3,6 +3,7 @@
 #include <ctype.h>
 #include "chess.h"
 #include "validation.h"
+#include <stdlib.h>
 
 int is_white_piece(char p) { return p >= 'A' && p <= 'Z'; }
 int is_black_piece(char p) { return p >= 'a' && p <= 'z'; }
@@ -118,6 +119,11 @@ void get_pseudo_legal_moves(int is_white, MoveList* move_list) {
                 }
                 if (r - 1 >= 0 && c - 1 >= 0 && is_black_piece(board[r - 1][c - 1])) add_move(move_list, r, c, r - 1, c - 1);
                 if (r - 1 >= 0 && c + 1 < 8 && is_black_piece(board[r - 1][c + 1])) add_move(move_list, r, c, r - 1, c + 1);
+                
+                // En Passant for White
+                if (ep_target_r == r - 1 && abs(ep_target_c - c) == 1) {
+                    add_move(move_list, r, c, ep_target_r, ep_target_c);
+                }
             } 
             else if (piece == 'p') { 
                 if (r + 1 < 8 && board[r + 1][c] == '.') {
@@ -126,6 +132,11 @@ void get_pseudo_legal_moves(int is_white, MoveList* move_list) {
                 }
                 if (r + 1 < 8 && c - 1 >= 0 && is_white_piece(board[r + 1][c - 1])) add_move(move_list, r, c, r + 1, c - 1);
                 if (r + 1 < 8 && c + 1 < 8 && is_white_piece(board[r + 1][c + 1])) add_move(move_list, r, c, r + 1, c + 1);
+                
+                // En Passant for Black
+                if (ep_target_r == r + 1 && abs(ep_target_c - c) == 1) {
+                    add_move(move_list, r, c, ep_target_r, ep_target_c);
+                }
             } 
             else if (piece == 'N' || piece == 'n') { 
                 int kr[] = {-2, -2, -1, -1, 1, 1, 2, 2};

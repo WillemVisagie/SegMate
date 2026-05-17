@@ -11,6 +11,10 @@ extern int white_castle_q;
 extern int black_castle_k;
 extern int black_castle_q;
 
+// En Passant Target Square (-1 if unavailable)
+extern int ep_target_r;
+extern int ep_target_c;
+
 typedef struct {
     int src_r, src_c;
     int dst_r, dst_c;
