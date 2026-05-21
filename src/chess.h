@@ -18,10 +18,11 @@ extern int ep_target_c;
 typedef struct {
     int src_r, src_c;
     int dst_r, dst_c;
+    char promo; // '\0' if no promotion, otherwise 'Q','R','B','N' or 'q','r','b','n'
 } Move;
 
 typedef struct {
-    Move moves[256];
+    Move moves[1024];
     int count;
 } MoveList;
 

@@ -9,6 +9,7 @@
 #include "randommove.h"
 
 typedef enum { HUMAN, AI } PlayerType;
+
 // starts a match based on user input and handles the game loop
 void start_match() {
     int choice;
@@ -68,6 +69,23 @@ void start_match() {
             }
 
             Move m = parse_move(input);
+            
+            // Interactive human promotion prompt if suffix was left out
+            if (m.src_c != -1) {
+                char piece = board[m.src_r][m.src_c];
+                if (((piece == 'P' && m.dst_r == 0) || (piece == 'p' && m.dst_r == 7)) && m.promo == '\0') {
+                    printf("Promote pawn to (q/r/b/n): ");
+                    char promo_input[16];
+                    if (fgets(promo_input, sizeof(promo_input), stdin) != NULL) {
+                        char p_char = promo_input[0];
+                        if (p_char >= 'A' && p_char <= 'Z') p_char += 32; // Standardize to lowercase
+                        if (p_char == 'q' || p_char == 'r' || p_char == 'b' || p_char == 'n') {
+                            m.promo = is_white_turn ? (p_char - 32) : p_char;
+                        }
+                    }
+                }
+            }
+
             if (m.src_c == -1 || !check_if_legal(m, is_white_turn)) {
                 printf("Invalid or illegal move! Please try again.\n");
                 continue; 

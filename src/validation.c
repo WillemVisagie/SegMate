@@ -19,8 +19,9 @@ int is_own(char p, int is_white) {
 }
 // add move to a MoveList
 void add_move(MoveList* list, int sr, int sc, int dr, int dc) {
+    if (list->count >= 1024) return; // Boundary check against stack buffer overflow
     if (dr >= 0 && dr < 8 && dc >= 0 && dc < 8) {
-        list->moves[list->count++] = (Move){sr, sc, dr, dc};
+        list->moves[list->count++] = (Move){sr, sc, dr, dc, '\0'};
     }
 }
 
@@ -99,6 +100,7 @@ int is_in_check(int is_white) {
 
     return is_square_attacked(kr, kc, !is_white);
 }
+
 // Generates moves assuming the King is perfectly safe (Ignores checks)
 void get_pseudo_legal_moves(int is_white, MoveList* move_list) {
     move_list->count = 0;
@@ -113,12 +115,46 @@ void get_pseudo_legal_moves(int is_white, MoveList* move_list) {
             if (!is_white && !is_black_piece(piece)) continue;
 
             if (piece == 'P') { 
+                // Forward single push
                 if (r - 1 >= 0 && board[r - 1][c] == '.') {
-                    add_move(move_list, r, c, r - 1, c);
-                    if (r == 6 && board[r - 2][c] == '.') add_move(move_list, r, c, r - 2, c); 
+                    if (r - 1 == 0) { // Promotion!
+                        char promos[] = {'Q', 'R', 'B', 'N'};
+                        for (int p = 0; p < 4; p++) {
+                            if (move_list->count < 1024) {
+                                move_list->moves[move_list->count++] = (Move){r, c, r - 1, c, promos[p]};
+                            }
+                        }
+                    } else {
+                        add_move(move_list, r, c, r - 1, c);
+                        if (r == 6 && board[r - 2][c] == '.') add_move(move_list, r, c, r - 2, c); 
+                    }
                 }
-                if (r - 1 >= 0 && c - 1 >= 0 && is_black_piece(board[r - 1][c - 1])) add_move(move_list, r, c, r - 1, c - 1);
-                if (r - 1 >= 0 && c + 1 < 8 && is_black_piece(board[r - 1][c + 1])) add_move(move_list, r, c, r - 1, c + 1);
+                // Capture Left
+                if (r - 1 >= 0 && c - 1 >= 0 && is_black_piece(board[r - 1][c - 1])) {
+                    if (r - 1 == 0) { // Promotion!
+                        char promos[] = {'Q', 'R', 'B', 'N'};
+                        for (int p = 0; p < 4; p++) {
+                            if (move_list->count < 1024) {
+                                move_list->moves[move_list->count++] = (Move){r, c, r - 1, c - 1, promos[p]};
+                            }
+                        }
+                    } else {
+                        add_move(move_list, r, c, r - 1, c - 1);
+                    }
+                }
+                // Capture Right
+                if (r - 1 >= 0 && c + 1 < 8 && is_black_piece(board[r - 1][c + 1])) {
+                    if (r - 1 == 0) { // Promotion!
+                        char promos[] = {'Q', 'R', 'B', 'N'};
+                        for (int p = 0; p < 4; p++) {
+                            if (move_list->count < 1024) {
+                                move_list->moves[move_list->count++] = (Move){r, c, r - 1, c + 1, promos[p]};
+                            }
+                        }
+                    } else {
+                        add_move(move_list, r, c, r - 1, c + 1);
+                    }
+                }
                 
                 // En Passant for White
                 if (ep_target_r == r - 1 && abs(ep_target_c - c) == 1) {
@@ -126,12 +162,46 @@ void get_pseudo_legal_moves(int is_white, MoveList* move_list) {
                 }
             } 
             else if (piece == 'p') { 
+                // Forward single push
                 if (r + 1 < 8 && board[r + 1][c] == '.') {
-                    add_move(move_list, r, c, r + 1, c);
-                    if (r == 1 && board[r + 2][c] == '.') add_move(move_list, r, c, r + 2, c); 
+                    if (r + 1 == 7) { // Promotion!
+                        char promos[] = {'q', 'r', 'b', 'n'};
+                        for (int p = 0; p < 4; p++) {
+                            if (move_list->count < 1024) {
+                                move_list->moves[move_list->count++] = (Move){r, c, r + 1, c, promos[p]};
+                            }
+                        }
+                    } else {
+                        add_move(move_list, r, c, r + 1, c);
+                        if (r == 1 && board[r + 2][c] == '.') add_move(move_list, r, c, r + 2, c); 
+                    }
                 }
-                if (r + 1 < 8 && c - 1 >= 0 && is_white_piece(board[r + 1][c - 1])) add_move(move_list, r, c, r + 1, c - 1);
-                if (r + 1 < 8 && c + 1 < 8 && is_white_piece(board[r + 1][c + 1])) add_move(move_list, r, c, r + 1, c + 1);
+                // Capture Left
+                if (r + 1 < 8 && c - 1 >= 0 && is_white_piece(board[r + 1][c - 1])) {
+                    if (r + 1 == 7) { // Promotion!
+                        char promos[] = {'q', 'r', 'b', 'n'};
+                        for (int p = 0; p < 4; p++) {
+                            if (move_list->count < 1024) {
+                                move_list->moves[move_list->count++] = (Move){r, c, r + 1, c - 1, promos[p]};
+                            }
+                        }
+                    } else {
+                        add_move(move_list, r, c, r + 1, c - 1);
+                    }
+                }
+                // Capture Right
+                if (r + 1 < 8 && c + 1 < 8 && is_white_piece(board[r + 1][c + 1])) {
+                    if (r + 1 == 7) { // Promotion!
+                        char promos[] = {'q', 'r', 'b', 'n'};
+                        for (int p = 0; p < 4; p++) {
+                            if (move_list->count < 1024) {
+                                move_list->moves[move_list->count++] = (Move){r, c, r + 1, c + 1, promos[p]};
+                            }
+                        }
+                    } else {
+                        add_move(move_list, r, c, r + 1, c + 1);
+                    }
+                }
                 
                 // En Passant for Black
                 if (ep_target_r == r + 1 && abs(ep_target_c - c) == 1) {
@@ -196,6 +266,7 @@ void get_pseudo_legal_moves(int is_white, MoveList* move_list) {
         }
     }
 }
+
 // get all legal moves
 void get_legal_moves(int is_white, MoveList* move_list) {
     MoveList pseudo;
@@ -208,30 +279,30 @@ void get_legal_moves(int is_white, MoveList* move_list) {
         char captured = execute_move_with_capture(m);
         
         if (!is_in_check(is_white)) {
-            move_list->moves[move_list->count++] = m;
+            if (move_list->count < 1024) {
+                move_list->moves[move_list->count++] = m;
+            }
         }
         
         undo_move(m, captured);
     }
 }
+
 // checks if a move is legal
 int check_if_legal(Move m, int is_white) {
     MoveList list;
     get_legal_moves(is_white, &list);
     for (int i = 0; i < list.count; i++) {
         if (list.moves[i].src_r == m.src_r && list.moves[i].src_c == m.src_c &&
-            list.moves[i].dst_r == m.dst_r && list.moves[i].dst_c == m.dst_c) {
+            list.moves[i].dst_r == m.dst_r && list.moves[i].dst_c == m.dst_c &&
+            list.moves[i].promo == m.promo) { // Ensure promotion piece type matches
             return 1; 
         }
     }
     return 0; 
 }
+
 // Checks if game is over and returns result
-// -1 -> Black wins
-// 0 -> Draw
-// 1 -> White wins
-// 2 -> Game not over
-// 3 -> Draw by 50-move rule
 int check_if_over(int is_white_turn) {
     if (halfmove_clock >= 100) return 3; // Draw by 50-move rule
     if (check_threefold_repetition()) return 0; // Draw by repetition

@@ -24,6 +24,7 @@ void store_board() {
     }
     move_count++;
 }
+
 // Checks if the current position has occurred 3 or more times in the history.
 int check_threefold_repetition() {
     int repetitions = 0;
@@ -42,6 +43,7 @@ int check_threefold_repetition() {
     }
     return repetitions >= 3;
 }
+
 // initialises board
 void init_board() {
     char starting_board[8][8] = {
@@ -68,6 +70,7 @@ void init_board() {
     
     store_board(); 
 }
+
 // prints board
 void print_board() {
     printf("\n");
@@ -81,6 +84,7 @@ void print_board() {
     printf("  -----------------\n");
     printf("    a b c d e f g h\n\n");
 }
+
 // Makes moves and returns captured piece (or '.' if none)
 char execute_move_with_capture(Move m) {
     char cap = board[m.dst_r][m.dst_c];
@@ -92,7 +96,11 @@ char execute_move_with_capture(Move m) {
         board[m.src_r][m.dst_c] = '.'; // Remove the enemy pawn
     }
     
-    board[m.dst_r][m.dst_c] = moving;
+    if (m.promo != '\0') {
+        board[m.dst_r][m.dst_c] = m.promo; // Place the promoted piece
+    } else {
+        board[m.dst_r][m.dst_c] = moving;
+    }
     board[m.src_r][m.src_c] = '.';
 
     // Physically move the Rook if this is a Castling move
@@ -108,9 +116,13 @@ char execute_move_with_capture(Move m) {
 
     return cap;
 }
+
 //undoes a move - for move legality
 void undo_move(Move m, char captured_piece) {
     char moving = board[m.dst_r][m.dst_c];
+    if (m.promo != '\0') {
+        moving = (m.dst_r == 0) ? 'P' : 'p'; // Revert promoted piece back to a pawn
+    }
     board[m.src_r][m.src_c] = moving;
     
     // Undo En Passant specific logic
@@ -132,6 +144,7 @@ void undo_move(Move m, char captured_piece) {
         }
     }
 }
+
 // actually makes move
 void execute_move(Move m) {
     char moving_piece = board[m.src_r][m.src_c];
@@ -176,9 +189,10 @@ void execute_move(Move m) {
 
     store_board(); 
 }
-// Parses moves in format "e2e4" or "e2-e4"
+
+// Parses moves in format "e2e4", "e2-e4", or "e7e8q"
 Move parse_move(const char* move_str) {
-    Move m = {-1, -1, -1, -1};
+    Move m = {-1, -1, -1, -1, '\0'};
     int state = 0; 
     for (int i = 0; move_str[i] != '\0'; i++) {
         char ch = move_str[i];
@@ -191,14 +205,31 @@ Move parse_move(const char* move_str) {
                 state = 1;              
             } else {
                 m.dst_r = 8 - (ch - '0');
+                state = 2; // Coordinates loaded
+            }
+        } else if (state == 2 && (ch == 'q' || ch == 'r' || ch == 'b' || ch == 'n' || ch == 'Q' || ch == 'R' || ch == 'B' || ch == 'N')) {
+            // Assign matching case based on destination rank
+            if (ch >= 'a' && ch <= 'z') {
+                m.promo = (m.dst_r == 0) ? (ch - 32) : ch;
+            } else {
+                m.promo = (m.dst_r == 7) ? (ch + 32) : ch;
             }
         }
     }
     return m;
 }
+
 // str function for Move struct basically
 void move_to_string(Move m, char* buffer) {
-    sprintf(buffer, "%c%d-%c%d", 
-        m.src_c + 'a', 8 - m.src_r, 
-        m.dst_c + 'a', 8 - m.dst_r);
+    if (m.promo != '\0') {
+        char p = m.promo;
+        if (p >= 'A' && p <= 'Z') p += 32; // Lowercase formatting for output
+        sprintf(buffer, "%c%d-%c%d%c", 
+            m.src_c + 'a', 8 - m.src_r, 
+            m.dst_c + 'a', 8 - m.dst_r, p);
+    } else {
+        sprintf(buffer, "%c%d-%c%d", 
+            m.src_c + 'a', 8 - m.src_r, 
+            m.dst_c + 'a', 8 - m.dst_r);
+    }
 }
