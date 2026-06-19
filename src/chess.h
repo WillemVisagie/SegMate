@@ -4,6 +4,10 @@
 extern char board[8][8];
 extern int move_count;
 extern int halfmove_clock;
+extern int fullmove_number; // Increments after Black's move (starts at 1)
+
+// Side to move: 1 = White, 0 = Black
+extern int side_to_move;
 
 // Castling rights trackers
 extern int white_castle_k;
@@ -31,6 +35,8 @@ void print_board();
 void execute_move(Move m);
 Move parse_move(const char* move_str);
 void move_to_string(Move m, char* buffer);
+// UCI-style format: "e2e4", "e7e8q" (no dash, lowercase promotion letter)
+void move_to_uci_string(Move m, char* buffer);
 
 char execute_move_with_capture(Move m);
 void undo_move(Move m, char captured_piece);

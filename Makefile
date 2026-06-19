@@ -12,7 +12,7 @@ TARGET = $(BIN_DIR)/segmate
 
 # Source files and Object files
 # Automatically maps src/file.c to bin/file.o
-SRCS = $(SRC_DIR)/chess.c $(SRC_DIR)/referee.c $(SRC_DIR)/validation.c $(SRC_DIR)/randommove.c
+SRCS = $(SRC_DIR)/chess.c $(SRC_DIR)/referee.c $(SRC_DIR)/validation.c $(SRC_DIR)/randommove.c $(SRC_DIR)/fen.c
 OBJS = $(patsubst $(SRC_DIR)/%.c, $(BIN_DIR)/%.o, $(SRCS))
 
 # Default target
@@ -33,6 +33,10 @@ $(BIN_DIR):
 # Run target: Executes the engine directly in the terminal
 run: $(TARGET)
 	./$(TARGET)
+
+# Run-UCI target: Launches the engine in UCI mode for chess GUIs
+run-uci: $(TARGET)
+	./$(TARGET) --uci
 
 # Clean rule
 clean:

@@ -4,9 +4,11 @@
 #include "chess.h"
 
 char board[8][8];
-char history[512][8][8]; 
+char history[512][8][8];
 int move_count = 0;
 int halfmove_clock = 0;
+int fullmove_number = 1;
+int side_to_move = 1; // 1 = White to move
 
 int white_castle_k = 1; int white_castle_q = 1;
 int black_castle_k = 1; int black_castle_q = 1;
@@ -63,12 +65,14 @@ void init_board() {
     }
     move_count = 0;
     halfmove_clock = 0;
-    
+    fullmove_number = 1;
+    side_to_move = 1; // White to move
+
     white_castle_k = 1; white_castle_q = 1;
     black_castle_k = 1; black_castle_q = 1;
     ep_target_r = -1; ep_target_c = -1;
-    
-    store_board(); 
+
+    store_board();
 }
 
 // prints board
@@ -187,7 +191,11 @@ void execute_move(Move m) {
         ep_target_c = m.src_c;
     }
 
-    store_board(); 
+    // Advance side to move and (after Black) the fullmove number
+    if (!side_to_move) fullmove_number++;
+    side_to_move = !side_to_move;
+
+    store_board();
 }
 
 // Parses moves in format "e2e4", "e2-e4", or "e7e8q"
@@ -224,12 +232,28 @@ void move_to_string(Move m, char* buffer) {
     if (m.promo != '\0') {
         char p = m.promo;
         if (p >= 'A' && p <= 'Z') p += 32; // Lowercase formatting for output
-        sprintf(buffer, "%c%d-%c%d%c", 
-            m.src_c + 'a', 8 - m.src_r, 
+        sprintf(buffer, "%c%d-%c%d%c",
+            m.src_c + 'a', 8 - m.src_r,
             m.dst_c + 'a', 8 - m.dst_r, p);
     } else {
-        sprintf(buffer, "%c%d-%c%d", 
-            m.src_c + 'a', 8 - m.src_r, 
+        sprintf(buffer, "%c%d-%c%d",
+            m.src_c + 'a', 8 - m.src_r,
+            m.dst_c + 'a', 8 - m.dst_r);
+    }
+}
+
+// UCI move format: "e2e4", "e7e8q" (no dash, lowercase promotion letter).
+// Used when communicating with chess GUIs.
+void move_to_uci_string(Move m, char* buffer) {
+    if (m.promo != '\0') {
+        char p = m.promo;
+        if (p >= 'A' && p <= 'Z') p += 32; // UCI promotion letters are lowercase
+        sprintf(buffer, "%c%d%c%d%c",
+            m.src_c + 'a', 8 - m.src_r,
+            m.dst_c + 'a', 8 - m.dst_r, p);
+    } else {
+        sprintf(buffer, "%c%d%c%d",
+            m.src_c + 'a', 8 - m.src_r,
             m.dst_c + 'a', 8 - m.dst_r);
     }
 }

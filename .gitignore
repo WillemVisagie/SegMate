@@ -1,3 +1,5 @@
-bin/ 
-out/ 
+bin/
+out/
 *.o
+# Windows reserved-name stray file (artifact of `cmd 2>nul` redirections)
+nul
