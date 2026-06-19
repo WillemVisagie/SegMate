@@ -10,7 +10,7 @@ Move get_random_move(int is_white) {
 
     if (list.count == 0) {
         // Fallback if no moves are available (Game Over state)
-        return (Move){-1, -1, -1, -1}; 
+        return (Move){-1, -1, -1, -1, '\0'};
     }
 
     // Pick a random index from the available moves
