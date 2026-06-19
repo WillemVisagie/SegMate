@@ -12,7 +12,7 @@ TARGET = $(BIN_DIR)/segmate
 
 # Source files and Object files
 # Automatically maps src/file.c to bin/file.o
-SRCS = $(SRC_DIR)/chess.c $(SRC_DIR)/referee.c $(SRC_DIR)/validation.c $(SRC_DIR)/randommove.c $(SRC_DIR)/fen.c $(SRC_DIR)/search.c
+SRCS = $(SRC_DIR)/chess.c $(SRC_DIR)/referee.c $(SRC_DIR)/validation.c $(SRC_DIR)/randommove.c $(SRC_DIR)/fen.c $(SRC_DIR)/search.c $(SRC_DIR)/uci.c $(SRC_DIR)/main.c
 OBJS = $(patsubst $(SRC_DIR)/%.c, $(BIN_DIR)/%.o, $(SRCS))
 
 # Default target

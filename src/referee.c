@@ -100,11 +100,6 @@ void start_match() {
         }
 
         print_board();
-        is_white_turn = !is_white_turn; 
+        is_white_turn = !is_white_turn;
     }
-}
-
-int main() {
-    start_match();
-    return 0;
 }
