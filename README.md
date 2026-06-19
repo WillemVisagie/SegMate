@@ -33,17 +33,27 @@ make clean      # removes bin/
 ```
 
 Launches a menu for Human-vs-Human, Human-vs-AI, AI-vs-Human, and AI-vs-AI
-play. Moves are entered in coordinate form, e.g. `e2e4`, `e2-e4`, or `e7e8q`
-(promotion suffix). Type `quit` or `resign` during a game.
+play. (This is the default only when stdin is a terminal; use `--referee` to
+force it when input is piped.) Moves are entered in coordinate form, e.g.
+`e2e4`, `e2-e4`, or `e7e8q` (promotion suffix). Type `quit` or `resign` during
+a game.
 
 ### UCI mode
 
+The engine auto-detects how it's being driven, so a chess GUI (Cute Chess,
+Arena, pychess, lichess-bot, …) can simply point at the plain executable with
+no arguments: when stdin is piped (not a terminal) it speaks UCI; when stdin
+is a terminal it launches the interactive referee. You can also force either
+mode explicitly:
+
 ```bash
-./bin/segmate --uci     # or -u
+./bin/segmate --uci       # or -u  — always speak UCI on stdin
+./bin/segmate --referee   # or -r  — always launch the referee menu
+./bin/segmate             # auto-detect (UCI if piped, referee if interactive)
 ```
 
-Reads UCI commands from stdin and writes responses to stdout. This is the mode
-to point a chess GUI (Cute Chess, Arena, pychess, lichess-bot, …) at.
+In UCI mode the engine reads commands from stdin and writes responses to
+stdout.
 
 A manual session:
 
@@ -102,7 +112,7 @@ src/
   search.c/.h     Move selection (currently the random mover) — the engine seam
   uci.c/.h        UCI protocol loop
   randommove.c/.h Random legal-move picker
-  main.c          Launch-mode dispatch
+  main.c          Launch-mode dispatch (auto-detects UCI vs referee)
 scripts/
   verify_all.sh   Full post-build verification
   uci_smoke.sh    Startpos move-legality sampler
