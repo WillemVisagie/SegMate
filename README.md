@@ -6,10 +6,11 @@ including castling, en passant, promotion, check/checkmate/stalemate, the
 [UCI protocol](http://wbec-ridderkerk.nl/html/UCIProtocol.html), so it can be
 driven by any standard chess GUI.
 
-The engine's brain is currently a **random mover** — it picks a uniformly
-random legal move. The move-selection logic is isolated behind a single seam
-(`find_best_move()` in `src/search.c`) so a real search can be dropped in later
-without touching the protocol or move-generation code.
+The engine's brain is a **basic MCTS** (UCB1 selection, random playouts,
+2000 iterations per move). Move selection is isolated behind a single seam
+(`find_best_move()` in `src/search.c`). The original random mover
+(`src/randommove.c`) is kept as a baseline: `./bin/segmate --match N` (or
+`make match`) plays N MCTS-vs-random games with alternating colours.
 
 ## Requirements
 

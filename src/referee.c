@@ -6,7 +6,7 @@
 #include "chess.h"
 #include "referee.h"
 #include "validation.h"
-#include "randommove.h"
+#include "search.h"
 
 typedef enum { HUMAN, AI } PlayerType;
 
@@ -92,7 +92,7 @@ void start_match() {
             }
             execute_move(m);
         } else {
-            Move m = get_random_move(is_white_turn);
+            Move m = find_best_move();
             char move_str[16];
             move_to_string(m, move_str);
             printf("[AI plays: %s]\n", move_str);
