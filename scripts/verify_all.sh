@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Comprehensive verification of the SegMate engine post-UCI integration.
-# Run inside WSL:  bash scripts/verify_all.sh
+# Run from anywhere:  bash scripts/verify_all.sh
 set -e
-cd /mnt/c/Users/Elect/Desktop/SegMate
+cd "$(dirname "$0")/.."
+TMPDIR_T=$(mktemp -d); trap 'rm -rf "$TMPDIR_T"' EXIT
 
 pass=0; fail=0
 ok()   { echo "PASS: $1"; pass=$((pass+1)); }
@@ -20,7 +21,7 @@ fi
 [ -x bin/segmate ] && ok "binary produced" || bad "binary produced"
 
 # ---- 2. FEN round-trip (rebuild the throwaway test) ---------------------
-cat > /tmp/fen_test.c << 'EOF'
+cat > "$TMPDIR_T/fen_test".c << 'EOF'
 #include <stdio.h>
 #include <string.h>
 #include "chess.h"
@@ -39,8 +40,8 @@ int main(void){
   return p==n?0:1;
 }
 EOF
-gcc -Wall -Wextra -O2 -Isrc -I. /tmp/fen_test.c bin/chess.o bin/fen.o -o /tmp/fen_test 2>/dev/null
-if /tmp/fen_test | grep -q "5/5"; then ok "FEN round-trip (5 positions)"; else /tmp/fen_test; bad "FEN round-trip"; fi
+gcc -Wall -Wextra -O2 -Isrc -I. "$TMPDIR_T/fen_test".c bin/chess.o bin/fen.o -o "$TMPDIR_T/fen_test" 2>/dev/null
+if "$TMPDIR_T/fen_test" | grep -q "5/5"; then ok "FEN round-trip (5 positions)"; else "$TMPDIR_T/fen_test"; bad "FEN round-trip"; fi
 
 # ---- 3. UCI handshake --------------------------------------------------
 OUT=$(printf 'uci\nquit\n' | ./bin/segmate --uci)
