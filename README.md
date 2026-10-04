@@ -25,12 +25,15 @@ scripts/mock_match.sh                  # 2 games, watch every move
 ```bash
 scripts/verify_all.sh   # build, FEN round-trips, UCI checks
 scripts/uci_smoke.sh    # startpos bestmove legality
+scripts/perft.sh        # move generator vs known perft counts
+scripts/book_check.sh   # opening book
 ```
 
 ## Files
 
 - `src/chess.c`, `validation.c`, `fen.c` — board, move generation/legality, FEN
 - `src/search.c` — MCTS (`find_best_move()` is the engine seam)
+- `src/book.c` — opening book (data from the CC0 Lichess chess-openings set)
 - `src/randommove.c` — random mover baseline
 - `src/uci.c`, `referee.c`, `match.c` — UCI loop, interactive game, MCTS-vs-random
 - `src/main.c` — mode dispatch

@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "book.h"
 #include "chess.h"
 #include "validation.h"
 #include "fen.h"
@@ -25,7 +26,7 @@
 static void send_id(void) {
     printf("id name %s\n", ENGINE_NAME);
     printf("id author %s\n", ENGINE_AUTHOR);
-    printf("option name Random Move type check default true\n");
+    printf("option name OwnBook type check default true\n");
     printf("uciok\n");
     fflush(stdout);
 }
@@ -154,8 +155,10 @@ static int handle_command(const char* line) {
     } else if (strcmp(cmd, "ucinewgame") == 0) {
         init_board();
     } else if (strcmp(cmd, "setoption") == 0) {
-        // We expose "Random Move" but accept any setoption silently; no real
-        // options are wired up yet.
+        // setoption name OwnBook value true|false; other options are ignored.
+        if (args != NULL && strstr(args, "OwnBook") != NULL) {
+            book_enabled = strstr(args, "false") == NULL;
+        }
     } else if (strcmp(cmd, "position") == 0) {
         handle_position(args);
     } else if (strcmp(cmd, "go") == 0) {

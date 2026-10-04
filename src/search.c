@@ -5,6 +5,7 @@
 // so every simulation starts by restoring a snapshot of the root position.
 #include <math.h>
 #include <stdlib.h>
+#include "book.h"
 #include "search.h"
 #include "validation.h"
 
@@ -59,6 +60,9 @@ Move find_best_move(void) {
     get_legal_moves(side_to_move, &root_moves);
     if (root_moves.count == 0) return none;
     if (root_moves.count == 1) return root_moves.moves[0];
+
+    Move book_move;
+    if (book_probe(&book_move)) return book_move;
 
     int iters = mcts_iterations;
     Node* nodes = malloc(sizeof(Node) * (iters + 1));

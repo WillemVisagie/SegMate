@@ -12,9 +12,12 @@
 #include <string.h>
 #ifdef _WIN32
 #include <io.h>
+#include <process.h>
+#define GETPID() _getpid()
 #define IS_TTY(fd) _isatty(fd)
 #else
 #include <unistd.h>
+#define GETPID() getpid()
 #define IS_TTY(fd) isatty(fd)
 #endif
 #include <stdlib.h>
@@ -40,7 +43,7 @@ static void print_usage(void) {
 }
 
 int main(int argc, char** argv) {
-    srand((unsigned)time(NULL));
+    srand((unsigned)time(NULL) ^ ((unsigned)GETPID() << 16)); // pid: engines started in the same second must differ
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--uci") == 0 || strcmp(argv[i], "-u") == 0) {
             uci_main();
