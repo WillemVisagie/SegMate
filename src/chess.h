@@ -30,6 +30,17 @@ typedef struct {
     int count;
 } MoveList;
 
+// Snapshot of all global position state. execute_move() mutates castling,
+// en passant, clocks and repetition history, which undo_move() does not
+// restore, so search/perft restore a snapshot instead.
+typedef struct {
+    char board[8][8];
+    int stm, wk, wq, bk, bq, epr, epc, halfmove, fullmove, move_count;
+} GameState;
+
+void save_state(GameState* s);
+void restore_state(const GameState* s);
+
 void init_board();
 void print_board();
 void execute_move(Move m);

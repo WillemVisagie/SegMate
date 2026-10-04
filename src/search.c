@@ -5,7 +5,6 @@
 // so every simulation starts by restoring a snapshot of the root position.
 #include <math.h>
 #include <stdlib.h>
-#include <string.h>
 #include "search.h"
 #include "validation.h"
 
@@ -13,31 +12,6 @@ int mcts_iterations = 2000;
 
 #define UCB_C 1.41
 #define PLAYOUT_MAX_PLIES 150
-
-typedef struct {
-    char board[8][8];
-    int stm, wk, wq, bk, bq, epr, epc, halfmove, fullmove, move_count;
-} State;
-
-static void save_state(State* s) {
-    memcpy(s->board, board, sizeof(board));
-    s->stm = side_to_move;
-    s->wk = white_castle_k; s->wq = white_castle_q;
-    s->bk = black_castle_k; s->bq = black_castle_q;
-    s->epr = ep_target_r; s->epc = ep_target_c;
-    s->halfmove = halfmove_clock; s->fullmove = fullmove_number;
-    s->move_count = move_count; // history entries below this are never modified
-}
-
-static void restore_state(const State* s) {
-    memcpy(board, s->board, sizeof(board));
-    side_to_move = s->stm;
-    white_castle_k = s->wk; white_castle_q = s->wq;
-    black_castle_k = s->bk; black_castle_q = s->bq;
-    ep_target_r = s->epr; ep_target_c = s->epc;
-    halfmove_clock = s->halfmove; fullmove_number = s->fullmove;
-    move_count = s->move_count;
-}
 
 typedef struct {
     Move move;          // move that led to this node
@@ -92,7 +66,7 @@ Move find_best_move(void) {
     int used = 1;
     nodes[0] = (Node){none, -1, -1, -1, 0, 0, 0, 0};
 
-    State root;
+    GameState root;
     save_state(&root);
 
     for (int i = 0; i < iters; i++) {

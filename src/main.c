@@ -19,7 +19,10 @@
 #endif
 #include <stdlib.h>
 #include <time.h>
+#include "chess.h"
+#include "fen.h"
 #include "match.h"
+#include "perft.h"
 #include "referee.h"
 #include "uci.h"
 
@@ -32,6 +35,7 @@ static void print_usage(void) {
     printf("  segmate --uci        Speak the UCI protocol on stdin\n");
     printf("  segmate --referee    Force the interactive referee menu\n");
     printf("  segmate --match [N] [--watch]  Play N MCTS-vs-random games (default 10), optionally printing every move\n");
+    printf("  segmate --perft D [FEN]  Count legal-move tree leaves to depth D\n");
     printf("  segmate --help       Show this help\n");
 }
 
@@ -53,6 +57,16 @@ int main(int argc, char** argv) {
                 else games = atoi(argv[j]);
             }
             run_match(games, watch);
+            return 0;
+        }
+        if (strcmp(argv[i], "--perft") == 0) { // --perft DEPTH [FEN]
+            if (i + 1 >= argc) { print_usage(); return 1; }
+            if (i + 2 < argc) {
+                if (set_board_from_fen(argv[i + 2]) != 0) { fprintf(stderr, "bad FEN\n"); return 1; }
+            } else {
+                init_board();
+            }
+            perft_divide(atoi(argv[i + 1]));
             return 0;
         }
         if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
