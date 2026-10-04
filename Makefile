@@ -1,7 +1,7 @@
 # Compiler settings
 CC = gcc
 # -Isrc and -I. tell the compiler to look for .h files in src/ and the root directory
-CFLAGS = -Wall -Wextra -O3 -fno-common -MMD -MP -Isrc -I.
+CFLAGS = -Wall -Wextra -O3 -fno-common -MMD -MP -pthread -Isrc -I.
 
 # Directories
 SRC_DIR = src

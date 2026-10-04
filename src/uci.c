@@ -4,13 +4,16 @@
 // (Cute Chess, Arena, pychess, lichess-bot, etc.). Command reference:
 // http://wbec-ridderkerk.nl/html/UCIProtocol.html
 //
-// Move selection is synchronous today (random mover is instant), so `go`
-// returns `bestmove` immediately. When a real, time-limited search lands in
-// search.c, the `go`/`stop` handling here will gain a worker thread and the
-// time/depth fields below will actually be honoured.
+// `go` runs the search on a worker thread so `stop` (and `quit` during an
+// infinite search) can interrupt it. While a search runs, only the worker may
+// touch the global board, so any command that changes the position first stops
+// and joins the search. Plain `go` (no limits) is not "infinite" here: it runs
+// a fixed number of iterations, which keeps piped `go` + `quit` scripts working.
 #include <stdio.h>
 #include <stdlib.h>
+#include <pthread.h>
 #include <string.h>
+#include <unistd.h>
 #include "book.h"
 #include "chess.h"
 #include "validation.h"
@@ -21,6 +24,8 @@
 #define ENGINE_NAME    "SegMate"
 #define ENGINE_AUTHOR  "Willem Visagie"
 #define LINE_MAX       4096
+#define MOVE_OVERHEAD_MS 30   // safety margin for I/O and thread start-up
+#define DEFAULT_MOVES_TO_GO 30
 
 // Emits the UCI identification handshake.
 static void send_id(void) {
@@ -100,11 +105,92 @@ static void handle_position(const char* args) {
     }
 }
 
-// Handles `go`. Time/depth/nodes fields are parsed and ignored for now because
-// the random mover is instantaneous; they will be consumed once a real search
-// runs on a worker thread.
+typedef struct {
+    long wtime, btime, winc, binc, movetime, movestogo, nodes; // -1 = not given
+    int infinite;
+} GoParams;
+
+static void parse_go(const char* args, GoParams* g) {
+    *g = (GoParams){-1, -1, -1, -1, -1, -1, -1, 0};
+    if (args == NULL) return;
+    char buf[LINE_MAX];
+    strncpy(buf, args, sizeof(buf) - 1);
+    buf[sizeof(buf) - 1] = '\0';
+    char* save = NULL;
+    for (char* tok = strtok_r(buf, " \t", &save); tok; tok = strtok_r(NULL, " \t", &save)) {
+        long* field = NULL;
+        if (!strcmp(tok, "wtime")) field = &g->wtime;
+        else if (!strcmp(tok, "btime")) field = &g->btime;
+        else if (!strcmp(tok, "winc")) field = &g->winc;
+        else if (!strcmp(tok, "binc")) field = &g->binc;
+        else if (!strcmp(tok, "movetime")) field = &g->movetime;
+        else if (!strcmp(tok, "movestogo")) field = &g->movestogo;
+        else if (!strcmp(tok, "nodes")) field = &g->nodes;
+        else if (!strcmp(tok, "infinite")) g->infinite = 1;
+        else if (!strcmp(tok, "depth")) strtok_r(NULL, " \t", &save); // MCTS has no depth; accepted, ignored
+        if (field) {
+            char* v = strtok_r(NULL, " \t", &save);
+            if (v) *field = atol(v);
+        }
+    }
+}
+
+// Milliseconds to spend on this move, or 0 if the GUI gave no time information.
+static double time_budget_ms(const GoParams* g) {
+    if (g->movetime >= 0) {
+        double b = g->movetime - MOVE_OVERHEAD_MS;
+        return b < 1 ? 1 : b;
+    }
+    long remaining = side_to_move ? g->wtime : g->btime;
+    long inc = side_to_move ? g->winc : g->binc;
+    if (remaining < 0) return 0;
+    if (inc < 0) inc = 0;
+    long moves = g->movestogo > 0 ? g->movestogo + 1 : DEFAULT_MOVES_TO_GO;
+    double b = (double)remaining / moves + inc / 2.0;
+    double max = remaining - 2.0 * MOVE_OVERHEAD_MS; // never plan to flag
+    if (b > max) b = max;
+    return b < 5 ? 5 : b;
+}
+
+static pthread_t worker;
+static int searching = 0;
+static SearchLimits limits;
+
+static void* worker_main(void* arg) {
+    (void)arg;
+    Move m = search_best_move(&limits);
+    // `go infinite` must not answer until told to stop, even if the search ended early.
+    if (limits.infinite) while (!search_stop_requested()) usleep(1000);
+    if (m.src_c == -1) {
+        printf("bestmove (none)\n");
+    } else {
+        char buf[8];
+        move_to_uci_string(m, buf);
+        printf("bestmove %s\n", buf);
+    }
+    fflush(stdout);
+    return NULL;
+}
+
+// Interrupts the running search (if any) and waits for its bestmove to be printed.
+static void stop_search(void) {
+    if (!searching) return;
+    search_request_stop();
+    pthread_join(worker, NULL);
+    searching = 0;
+}
+
+// Waits for the running search to finish on its own limits (infinite ones are stopped).
+static void finish_search(void) {
+    if (searching && !limits.infinite) {
+        pthread_join(worker, NULL);
+        searching = 0;
+    }
+    stop_search();
+}
+
 static void handle_go(const char* args) {
-    (void)args; // No timing logic yet — see file header.
+    stop_search();
 
     // If the side to move has no legal moves, the GUI has usually already
     // signalled game over; reply with the conventional null move regardless.
@@ -116,15 +202,19 @@ static void handle_go(const char* args) {
         return;
     }
 
-    Move m = find_best_move();
-    if (m.src_c == -1) {
-        printf("bestmove (none)\n");
-    } else {
-        char buf[8];
-        move_to_uci_string(m, buf);
-        printf("bestmove %s\n", buf);
+    GoParams g;
+    parse_go(args, &g);
+    limits = (SearchLimits){0, 0, g.infinite, 1};
+    if (!g.infinite) {
+        limits.time_ms = time_budget_ms(&g);
+        if (g.nodes > 0) limits.iterations = g.nodes;
     }
-    fflush(stdout);
+    search_clear_stop();
+    searching = 1;
+    if (pthread_create(&worker, NULL, worker_main, NULL) != 0) {
+        searching = 0;
+        worker_main(NULL); // no thread available: search synchronously
+    }
 }
 
 // Returns 0 to keep the loop running, 1 to stop (on "quit").
@@ -153,18 +243,21 @@ static int handle_command(const char* line) {
         printf("readyok\n");
         fflush(stdout);
     } else if (strcmp(cmd, "ucinewgame") == 0) {
+        stop_search();
         init_board();
     } else if (strcmp(cmd, "setoption") == 0) {
+        stop_search();
         // setoption name OwnBook value true|false; other options are ignored.
         if (args != NULL && strstr(args, "OwnBook") != NULL) {
             book_enabled = strstr(args, "false") == NULL;
         }
     } else if (strcmp(cmd, "position") == 0) {
+        stop_search();
         handle_position(args);
     } else if (strcmp(cmd, "go") == 0) {
         handle_go(args);
     } else if (strcmp(cmd, "stop") == 0) {
-        // No asynchronous search yet; nothing to stop.
+        stop_search();
     } else if (strcmp(cmd, "ponderhit") == 0) {
         // No pondering yet.
     } else if (strcmp(cmd, "debug") == 0) {
@@ -173,6 +266,7 @@ static int handle_command(const char* line) {
         printf("registration later\n");
         fflush(stdout);
     } else if (strcmp(cmd, "quit") == 0) {
+        finish_search();
         return 1;
     }
     // Unknown commands are ignored, per the UCI spec.
@@ -187,4 +281,5 @@ void uci_main(void) {
     while (fgets(line, sizeof(line), stdin) != NULL) {
         if (handle_command(line)) break;
     }
+    finish_search(); // stdin closed mid-search: let a bounded search answer
 }

@@ -26,6 +26,7 @@ scripts/mock_match.sh                  # 2 games, watch every move
 scripts/verify_all.sh   # build, FEN round-trips, UCI checks
 scripts/uci_smoke.sh    # startpos bestmove legality
 scripts/perft.sh        # move generator vs known perft counts
+scripts/time_check.sh   # go movetime/wtime/nodes/infinite + stop
 scripts/book_check.sh   # opening book
 ```
 
