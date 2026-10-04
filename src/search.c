@@ -8,8 +8,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 #include "book.h"
+#include "platform.h"
 #include "search.h"
 #include "validation.h"
 
@@ -19,12 +19,6 @@ static atomic_int stop_flag;
 void search_clear_stop(void) { atomic_store(&stop_flag, 0); }
 void search_request_stop(void) { atomic_store(&stop_flag, 1); }
 int search_stop_requested(void) { return atomic_load(&stop_flag); }
-
-static double now_ms(void) {
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return ts.tv_sec * 1000.0 + ts.tv_nsec / 1e6;
-}
 
 #define UCB_C 1.41
 #define MAX_NODES (1 << 20) // pool cap for time/infinite searches (~60MB virtual)
@@ -130,11 +124,11 @@ Move search_best_move(const SearchLimits* lim) {
     GameState root;
     save_state(&root);
 
-    double start = now_ms(), last_info = start;
+    double start = plat_now_ms(), last_info = start;
     long i;
     for (i = 0; i < cap; i++) {
         if (i > 0 && (i & 15) == 0) { // poll the clock/stop flag every 16 iterations
-            double t = now_ms();
+            double t = plat_now_ms();
             if (search_stop_requested() || (lim->time_ms > 0 && t - start >= lim->time_ms)) break;
             if (lim->info && t - last_info >= INFO_INTERVAL_MS) {
                 print_info(nodes, i, t - start);
@@ -167,7 +161,7 @@ Move search_best_move(const SearchLimits* lim) {
     }
 
     restore_state(&root);
-    if (lim->info) print_info(nodes, i, now_ms() - start);
+    if (lim->info) print_info(nodes, i, plat_now_ms() - start);
     int best = -1;
     for (int c = nodes[0].first_child; c != -1; c = nodes[c].next_sibling)
         if (best == -1 || nodes[c].visits > nodes[best].visits) best = c;

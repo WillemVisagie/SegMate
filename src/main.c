@@ -10,22 +10,13 @@
 //                       executable without needing to pass arguments.
 #include <stdio.h>
 #include <string.h>
-#ifdef _WIN32
-#include <io.h>
-#include <process.h>
-#define GETPID() _getpid()
-#define IS_TTY(fd) _isatty(fd)
-#else
-#include <unistd.h>
-#define GETPID() getpid()
-#define IS_TTY(fd) isatty(fd)
-#endif
 #include <stdlib.h>
 #include <time.h>
 #include "chess.h"
 #include "fen.h"
 #include "match.h"
 #include "perft.h"
+#include "platform.h"
 #include "referee.h"
 #include "uci.h"
 

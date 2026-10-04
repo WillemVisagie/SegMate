@@ -11,13 +11,12 @@
 // a fixed number of iterations, which keeps piped `go` + `quit` scripts working.
 #include <stdio.h>
 #include <stdlib.h>
-#include <pthread.h>
 #include <string.h>
-#include <unistd.h>
 #include "book.h"
 #include "chess.h"
 #include "validation.h"
 #include "fen.h"
+#include "platform.h"
 #include "search.h"
 #include "uci.h"
 
@@ -152,7 +151,7 @@ static double time_budget_ms(const GoParams* g) {
     return b < 5 ? 5 : b;
 }
 
-static pthread_t worker;
+static plat_thread worker;
 static int searching = 0;
 static SearchLimits limits;
 
@@ -160,7 +159,7 @@ static void* worker_main(void* arg) {
     (void)arg;
     Move m = search_best_move(&limits);
     // `go infinite` must not answer until told to stop, even if the search ended early.
-    if (limits.infinite) while (!search_stop_requested()) usleep(1000);
+    if (limits.infinite) while (!search_stop_requested()) plat_sleep_ms(1);
     if (m.src_c == -1) {
         printf("bestmove (none)\n");
     } else {
@@ -176,14 +175,14 @@ static void* worker_main(void* arg) {
 static void stop_search(void) {
     if (!searching) return;
     search_request_stop();
-    pthread_join(worker, NULL);
+    plat_thread_join(worker);
     searching = 0;
 }
 
 // Waits for the running search to finish on its own limits (infinite ones are stopped).
 static void finish_search(void) {
     if (searching && !limits.infinite) {
-        pthread_join(worker, NULL);
+        plat_thread_join(worker);
         searching = 0;
     }
     stop_search();
@@ -211,7 +210,7 @@ static void handle_go(const char* args) {
     }
     search_clear_stop();
     searching = 1;
-    if (pthread_create(&worker, NULL, worker_main, NULL) != 0) {
+    if (plat_thread_create(&worker, worker_main, NULL) != 0) {
         searching = 0;
         worker_main(NULL); // no thread available: search synchronously
     }

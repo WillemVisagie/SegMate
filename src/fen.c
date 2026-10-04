@@ -5,6 +5,7 @@
 #include <ctype.h>
 #include "chess.h"
 #include "fen.h"
+#include "platform.h"
 
 // Parses a FEN string and fully resets game state from it.
 // Accepts the standard 6-field FEN:

@@ -38,3 +38,10 @@ scripts/book_check.sh   # opening book
 - `src/randommove.c` — random mover baseline
 - `src/uci.c`, `referee.c`, `match.c` — UCI loop, interactive game, MCTS-vs-random
 - `src/main.c` — mode dispatch
+
+## Portability
+
+`src/platform.h` is a small shim (threads, sleep, clock, `getpid`, `isatty`)
+so the engine builds on Linux, macOS and Windows (MinGW/MSYS2) without a
+rewrite. Search runs on a worker thread so `stop` works; all OS-specific code
+lives in that one header. The Windows branch is written but untested.
