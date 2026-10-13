@@ -1,4 +1,4 @@
-// search.c - Move selection: basic MCTS (UCB1, random playouts)
+// search.c - Move selection: MCTS (UCB1, capture-biased playouts with a material cutoff)
 //
 // The board is global state and execute_move() also mutates castling rights,
 // en passant, clocks and repetition history (undo_move only fixes squares),
@@ -16,6 +16,7 @@
 int mcts_iterations = 2000;
 int swindle_pct = 40;
 int beauty_pct = 50;
+int smart_playouts = 1;
 
 static atomic_int stop_flag;
 void search_clear_stop(void) { atomic_store(&stop_flag, 0); }
@@ -27,6 +28,7 @@ int search_stop_requested(void) { return atomic_load(&stop_flag); }
 #define INFO_INTERVAL_MS 1000
 #define PV_MAX 8
 #define PLAYOUT_MAX_PLIES 150
+#define CUTOFF_PAWNS 5 // smart playouts: material lead that counts as a win
 
 typedef struct {
     Move move;          // move that led to this node
@@ -46,12 +48,38 @@ static double terminal_score(const MoveList* l) {
     return halfmove_clock >= 100 ? 0.5 : -1;
 }
 
-// Plays random moves to the end (or the ply cap). *mated = 1 if it ended in checkmate.
+static int material_balance(int white);
+
+// No pawns, rooks or queens and at most one minor piece: nobody can mate.
+static int insufficient_material(void) {
+    int minors = 0;
+    for (int i = 0; i < 64; i++)
+        switch (board[i / 8][i % 8] | 32) {
+            case 'p': case 'r': case 'q': return 0;
+            case 'n': case 'b': if (++minors > 1) return 0; break;
+        }
+    return 1;
+}
+
+// White's expected score from a material lead in pawns.
+static double material_score(int bal) { return 0.02 + 0.96 / (1 + pow(10, -bal / 4.0)); }
+
+// Plays random moves to the end (or the ply cap). *mated = 1 if it ended in
+// checkmate. Smart playouts prefer captures/promotions, stop early once the
+// material swings by CUTOFF_PAWNS from where the playout started (relative, so
+// an already-won position still gets real playouts toward mate) and score an
+// unfinished game by material, always below an actual mate.
 static double playout(int* mated) {
     *mated = 0;
+    int start_bal = material_balance(1);
     for (int ply = 0; ply < PLAYOUT_MAX_PLIES; ply++) {
+        if (smart_playouts && (ply & 3) == 0) {
+            int bal = material_balance(1);
+            if (abs(bal - start_bal) >= CUTOFF_PAWNS) return material_score(bal);
+            if (insufficient_material()) return 0.5;
+        }
         Move m;
-        if (!random_legal_move(side_to_move, &m)) {
+        if (!random_legal_move(side_to_move, &m, smart_playouts)) {
             if (!is_in_check(side_to_move)) return 0.5;
             *mated = 1;
             return side_to_move ? 0.0 : 1.0;
@@ -59,7 +87,7 @@ static double playout(int* mated) {
         if (halfmove_clock >= 100) return 0.5;
         execute_move(m);
     }
-    return 0.5;
+    return smart_playouts ? material_score(material_balance(1)) : 0.5;
 }
 
 // --- Swindler / Aesthete helpers -------------------------------------------

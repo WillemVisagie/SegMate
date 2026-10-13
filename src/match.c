@@ -9,11 +9,17 @@
 
 #define MAX_PLIES 300
 
-static Move weak_move(int iters) {
-    int sw = swindle_pct, bt = beauty_pct, bk = book_enabled, it = mcts_iterations;
-    swindle_pct = 0; beauty_pct = 0; book_enabled = 0; mcts_iterations = iters;
-    Move m = find_best_move();
-    swindle_pct = sw; beauty_pct = bt; book_enabled = bk; mcts_iterations = it;
+static Move engine_move(const MatchConfig* cfg) {
+    SearchLimits lim = {cfg->movetime_ms, 0, 0, 0};
+    return search_best_move(&lim);
+}
+
+static Move weak_move(const MatchConfig* cfg) {
+    int sw = swindle_pct, bt = beauty_pct, bk = book_enabled, it = mcts_iterations, sp = smart_playouts;
+    swindle_pct = 0; beauty_pct = 0; book_enabled = 0; mcts_iterations = cfg->weak_iters;
+    smart_playouts = !cfg->weak_old;
+    Move m = engine_move(cfg);
+    swindle_pct = sw; beauty_pct = bt; book_enabled = bk; mcts_iterations = it; smart_playouts = sp;
     return m;
 }
 
@@ -30,8 +36,8 @@ void run_match(const MatchConfig* cfg) {
             status = check_if_over(side_to_move);
             if (status != 2) break;
             int mcts_turn = (side_to_move == 1) == mcts_white;
-            Move m = mcts_turn ? find_best_move()
-                 : cfg->weak_iters > 0 ? weak_move(cfg->weak_iters) : get_random_move(side_to_move);
+            Move m = mcts_turn ? engine_move(cfg)
+                 : cfg->weak_iters > 0 ? weak_move(cfg) : get_random_move(side_to_move);
             if (watch) {
                 char buf[16];
                 move_to_string(m, buf);

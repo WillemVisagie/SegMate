@@ -1,7 +1,7 @@
 # SegMate
 
 A chess engine in C with full rules, a UCI interface, and an MCTS brain
-(UCB1 selection, random playouts) with a personality: part **Swindler**, part
+(UCB1 selection, capture-biased playouts) with a personality: part **Swindler**, part
 **Aesthete**. A random move selector is included
 baseline opponent.
 

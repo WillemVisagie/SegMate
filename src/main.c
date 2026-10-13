@@ -30,7 +30,7 @@ static void print_usage(void) {
     printf("                       is piped (e.g. by a chess GUI)\n");
     printf("  segmate --uci        Speak the UCI protocol on stdin\n");
     printf("  segmate --referee    Force the interactive referee menu\n");
-    printf("  segmate --match [N] [--watch] [--weak ITERS] [--iters N] [--swindle P] [--beauty P] [--nobook]\n                       Play N games vs the random mover (or plain MCTS with ITERS iterations)\n");
+    printf("  segmate --match [N] [--watch] [--weak ITERS] [--iters N] [--swindle P] [--beauty P] [--nobook]\n                       [--weak-old] [--movetime MS]\n                       Play N games vs the random mover (or plain MCTS with ITERS iterations)\n");
     printf("  segmate --perft D [FEN]  Count legal-move tree leaves to depth D\n");
     printf("  segmate --help       Show this help\n");
 }
@@ -47,13 +47,15 @@ int main(int argc, char** argv) {
             return 0;
         }
         if (strcmp(argv[i], "--match") == 0) {
-            MatchConfig cfg = {10, 0, 0};
+            MatchConfig cfg = {10, 0, 0, 0, 0};
             for (int j = i + 1; j < argc; j++) {
                 if (strcmp(argv[j], "--watch") == 0) cfg.watch = 1;
                 else if (strcmp(argv[j], "--weak") == 0 && j + 1 < argc) cfg.weak_iters = atoi(argv[++j]);
                 else if (strcmp(argv[j], "--iters") == 0 && j + 1 < argc) mcts_iterations = atoi(argv[++j]);
                 else if (strcmp(argv[j], "--swindle") == 0 && j + 1 < argc) swindle_pct = atoi(argv[++j]);
                 else if (strcmp(argv[j], "--beauty") == 0 && j + 1 < argc) beauty_pct = atoi(argv[++j]);
+                else if (strcmp(argv[j], "--weak-old") == 0) cfg.weak_old = 1;
+                else if (strcmp(argv[j], "--movetime") == 0 && j + 1 < argc) cfg.movetime_ms = atof(argv[++j]);
                 else if (strcmp(argv[j], "--nobook") == 0) book_enabled = 0;
                 else cfg.games = atoi(argv[j]);
             }

@@ -333,19 +333,34 @@ void get_legal_moves(int is_white, MoveList* move_list) {
             move_list->moves[move_list->count++] = pseudo.moves[i];
 }
 
-int random_legal_move(int is_white, Move* out) {
+// Playout weight of a pseudo-legal move: captures by victim value, queen promotions high.
+static int move_weight(Move m) {
+    if (m.promo != '\0') return (m.promo | 32) == 'q' ? 20 : 1;
+    switch (board[m.dst_r][m.dst_c] | 32) {
+        case 'p': return 4;
+        case 'n': case 'b': return 8;
+        case 'r': return 12;
+        case 'q': return 20;
+        default: return 1;
+    }
+}
+
+int random_legal_move(int is_white, Move* out, int weighted) {
     MoveList l;
     get_pseudo_legal_moves(is_white, &l);
     KingInfo k;
     king_info(is_white, &k);
-    while (l.count > 0) { // pick at random, drop illegal picks until one sticks
-        int i = rand() % l.count;
+    int w[1024], total = 0;
+    for (int i = 0; i < l.count; i++) total += w[i] = weighted ? move_weight(l.moves[i]) : 1;
+    while (total > 0) { // pick by weight, drop illegal picks until one sticks
+        int r = rand() % total, i = 0;
+        while (r >= w[i]) r -= w[i++];
         if (is_legal(l.moves[i], is_white, &k)) { *out = l.moves[i]; return 1; }
-        l.moves[i] = l.moves[--l.count];
+        total -= w[i];
+        w[i] = 0;
     }
     return 0;
 }
-
 // checks if a move is legal
 int check_if_legal(Move m, int is_white) {
     MoveList list;
