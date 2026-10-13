@@ -229,6 +229,61 @@ static void print_info(const Node* nodes, int best, long iterations, double elap
            depth, iterations, cp, ms, ms > 0 ? iterations * 1000 / ms : 0, pv);
 }
 
+// --- Tree reuse -------------------------------------------------------------
+// The tree of the last search is kept, one per root colour (so in --match each
+// side keeps its own). The next search looks for the grandchild matching the
+// new position (our move + their reply) and continues from its subtree.
+static Node* kept[2];
+static GameState kept_root[2];
+static long reuse_searches, reuse_hits;
+
+static int same_position(const GameState* a, const GameState* b) {
+    return memcmp(a->board, b->board, sizeof(a->board)) == 0 && a->stm == b->stm &&
+           a->wk == b->wk && a->wq == b->wq && a->bk == b->bk && a->bq == b->bq &&
+           a->epr == b->epr && a->epc == b->epc;
+}
+
+// Kept-tree node (depth 2) whose position equals `now`, or -1. Leaves the board at `now`.
+static int find_reusable(int side, const GameState* now) {
+    const Node* t = kept[side];
+    int found = -1;
+    if (!t) return -1;
+    for (int c = t[0].first_child; c != -1 && found == -1; c = t[c].next_sibling)
+        for (int g = t[c].first_child; g != -1 && found == -1; g = t[g].next_sibling) {
+            restore_state(&kept_root[side]);
+            move_count = now->move_count; // replay above the real history, never over it
+            execute_move(t[c].move);
+            execute_move(t[g].move);
+            GameState s;
+            save_state(&s);
+            if (same_position(&s, now)) found = g;
+        }
+    restore_state(now);
+    return found;
+}
+
+static int subtree_size(const Node* t, int n) {
+    int size = 1;
+    for (int c = t[n].first_child; c != -1; c = t[c].next_sibling) size += subtree_size(t, c);
+    return size;
+}
+
+// Copies the subtree at `n` into dst (preorder, sibling order kept) and returns its index.
+static int copy_subtree(const Node* src, int n, Node* dst, int* used, int parent) {
+    int d = (*used)++;
+    dst[d] = src[n];
+    dst[d].parent = parent;
+    dst[d].first_child = dst[d].next_sibling = -1;
+    int prev = -1;
+    for (int c = src[n].first_child; c != -1; c = src[c].next_sibling) {
+        int dc = copy_subtree(src, c, dst, used, d);
+        if (prev == -1) dst[d].first_child = dc;
+        else dst[prev].next_sibling = dc;
+        prev = dc;
+    }
+    return d;
+}
+
 Move find_best_move(void) {
     SearchLimits none = {0, 0, 0, 0};
     return search_best_move(&none);
@@ -251,15 +306,31 @@ Move search_best_move(const SearchLimits* lim) {
              : bounded_by_time ? MAX_NODES - 1 : mcts_iterations;
     if (cap > MAX_NODES - 1) cap = MAX_NODES - 1;
 
-    Node* nodes = malloc(sizeof(Node) * (cap + 1));
-    if (!nodes) return root_moves.moves[0];
-    int used = 1;
-    nodes[0] = (Node){none, -1, -1, -1, 0, 0, 0, 0};
-
     GameState root;
     save_state(&root);
-
     int root_white = side_to_move;
+
+    int reuse = find_reusable(root_white, &root), reused = 0;
+    reuse_searches++;
+    if (reuse != -1) {
+        reused = subtree_size(kept[root_white], reuse);
+        if (reused > MAX_NODES / 2) reuse = -1, reused = 0;
+    }
+    long pool = cap + reused + 1;
+    if (pool > MAX_NODES) pool = MAX_NODES;
+    Node* nodes = malloc(sizeof(Node) * pool);
+    if (!nodes) return root_moves.moves[0];
+    int used = 0;
+    if (reuse != -1) {
+        copy_subtree(kept[root_white], reuse, nodes, &used, -1);
+        reuse_hits++;
+    } else {
+        nodes[used++] = (Node){none, -1, -1, -1, 0, 0, 0, 0};
+    }
+    free(kept[root_white]);
+    kept[root_white] = NULL;
+    if (cap > pool - used) cap = pool - used;
+
     int start_bal = material_balance(root_white);
     double beauty_w = beauty_pct / 1000.0, beauty_sum = 0;
 
@@ -323,8 +394,11 @@ Move search_best_move(const SearchLimits* lim) {
         print_info(nodes, best, i, plat_now_ms() - start);
         if (swindle_pct > 0 || beauty_w > 0)
             printf("info string swindle temp %.2f, avg beauty bonus %.4f\n", temp, i ? beauty_sum / i : 0.0);
+        printf("info string tree reuse: kept %d of the previous tree, hits %ld/%ld\n", reused, reuse_hits, reuse_searches);
     }
     Move result = best == -1 ? root_moves.moves[0] : nodes[best].move;
-    free(nodes);
+    Node* shrunk = realloc(nodes, sizeof(Node) * used); // keep the tree for the next search
+    kept[root_white] = shrunk ? shrunk : nodes;
+    kept_root[root_white] = root;
     return result;
 }
