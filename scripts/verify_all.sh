@@ -75,6 +75,10 @@ echo "$RES" | grep -qE '^bestmove' && ok "promotion accepted" || { echo "$RES"; 
 printf 'position fen 7k/5Q2/6K1/8/8/8/8/8 b - - 0 1\ngo\nquit\n' | ./bin/segmate --uci | grep -q 'bestmove (none)' \
   && ok "stalemate -> bestmove (none)" || bad "stalemate handling"
 
+# ---- 5a. Bishop under-promotion over UCI ('b' is also a file letter) -----
+MV=$(printf 'position fen 3r3k/2P5/8/8/8/8/8/K7 w - - 0 1 moves c7d8b\ngo nodes 200\nquit\n' | ./bin/segmate --uci | awk '/^bestmove/ {print $2}')
+case "$MV" in h8*) ok "c7d8b applied (black replies $MV)" ;; *) bad "c7d8b: got '$MV'" ;; esac
+
 # ---- 5b. Long games: a 500-ply move list is applied in full ---------------
 LONG="position startpos moves$(for i in $(seq 125); do printf ' g1f3 g8f6 f3g1 f6g8'; done) e2e4"
 MV=$(printf '%s\ngo nodes 200\nquit\n' "$LONG" | ./bin/segmate --uci | awk '/^bestmove/ {print $2}')

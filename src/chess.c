@@ -281,7 +281,14 @@ Move parse_move(const char* move_str) {
     int state = 0; 
     for (int i = 0; move_str[i] != '\0'; i++) {
         char ch = move_str[i];
-        if (ch >= 'a' && ch <= 'h') {
+        if (state == 2 && strchr("qrbnQRBN", ch) != NULL) { // before the file check: 'b' is also a file
+            // Assign matching case based on destination rank
+            if (ch >= 'a' && ch <= 'z') {
+                m.promo = (m.dst_r == 0) ? (ch - 32) : ch;
+            } else {
+                m.promo = (m.dst_r == 7) ? (ch + 32) : ch;
+            }
+        } else if (ch >= 'a' && ch <= 'h') {
             if (state == 0) m.src_c = ch - 'a';
             else m.dst_c = ch - 'a';
         } else if (ch >= '1' && ch <= '8') {
@@ -291,13 +298,6 @@ Move parse_move(const char* move_str) {
             } else {
                 m.dst_r = 8 - (ch - '0');
                 state = 2; // Coordinates loaded
-            }
-        } else if (state == 2 && (ch == 'q' || ch == 'r' || ch == 'b' || ch == 'n' || ch == 'Q' || ch == 'R' || ch == 'B' || ch == 'N')) {
-            // Assign matching case based on destination rank
-            if (ch >= 'a' && ch <= 'z') {
-                m.promo = (m.dst_r == 0) ? (ch - 32) : ch;
-            } else {
-                m.promo = (m.dst_r == 7) ? (ch + 32) : ch;
             }
         }
     }
