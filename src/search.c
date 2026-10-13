@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "book.h"
+#include "eval.h"
 #include "platform.h"
 #include "search.h"
 #include "validation.h"
@@ -16,7 +17,8 @@
 int mcts_iterations = 2000;
 int swindle_pct = 40;
 int beauty_pct = 50;
-int smart_playouts = 1;
+int smart_playouts = 2;
+int playout_plies = 4;
 
 static atomic_int stop_flag;
 void search_clear_stop(void) { atomic_store(&stop_flag, 0); }
@@ -61,21 +63,25 @@ static int insufficient_material(void) {
     return 1;
 }
 
-// White's expected score from a material lead in pawns.
+// White's expected score from a material lead in pawns / an eval in centipawns,
+// always strictly between a mate for either side.
 static double material_score(int bal) { return 0.02 + 0.96 / (1 + pow(10, -bal / 4.0)); }
+static double eval_score(void) { return 0.02 + 0.96 / (1 + pow(10, -evaluate() / 400.0)); }
 
-// Plays random moves to the end (or the ply cap). *mated = 1 if it ended in
-// checkmate. Smart playouts prefer captures/promotions, stop early once the
-// material swings by CUTOFF_PAWNS from where the playout started (relative, so
-// an already-won position still gets real playouts toward mate) and score an
-// unfinished game by material, always below an actual mate.
+// Plays semi-random moves and returns White's score. *mated = 1 if it ended in
+// checkmate. Level 0: uniform random to the end (or the ply cap). Level 1+:
+// captures/promotions preferred, stop once material swings by CUTOFF_PAWNS from
+// where the playout started (relative, so an already-won position still gets
+// real playouts toward mate). Level 1 scores an unfinished game by material,
+// level 2 stops after playout_plies and scores by evaluate().
 static double playout(int* mated) {
     *mated = 0;
     int start_bal = material_balance(1);
-    for (int ply = 0; ply < PLAYOUT_MAX_PLIES; ply++) {
+    int max_plies = smart_playouts >= 2 ? playout_plies : PLAYOUT_MAX_PLIES;
+    for (int ply = 0; ply < max_plies; ply++) {
         if (smart_playouts && (ply & 3) == 0) {
             int bal = material_balance(1);
-            if (abs(bal - start_bal) >= CUTOFF_PAWNS) return material_score(bal);
+            if (abs(bal - start_bal) >= CUTOFF_PAWNS) return smart_playouts >= 2 ? eval_score() : material_score(bal);
             if (insufficient_material()) return 0.5;
         }
         Move m;
@@ -87,7 +93,7 @@ static double playout(int* mated) {
         if (halfmove_clock >= 100) return 0.5;
         execute_move(m);
     }
-    return smart_playouts ? material_score(material_balance(1)) : 0.5;
+    return smart_playouts >= 2 ? eval_score() : smart_playouts ? material_score(material_balance(1)) : 0.5;
 }
 
 // --- Swindler / Aesthete helpers -------------------------------------------

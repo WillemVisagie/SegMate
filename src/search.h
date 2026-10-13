@@ -19,9 +19,11 @@ extern int mcts_iterations;
 extern int swindle_pct;
 extern int beauty_pct;
 
-// 1 = playouts biased toward captures/promotions with an early material
-// cutoff; 0 = uniform random to the end (the old baseline, for A/B tests).
+// Playout policy, for A/B tests against older versions: 0 = uniform random to
+// the end; 1 = biased toward captures/promotions with an early material cutoff;
+// 2 (default) = like 1 but stops after playout_plies and scores by evaluate().
 extern int smart_playouts;
+extern int playout_plies;
 
 typedef struct {
     double time_ms;   // > 0: stop after this many milliseconds

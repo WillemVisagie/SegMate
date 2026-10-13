@@ -6,7 +6,7 @@ typedef struct {
     int games;
     int watch;          // print every move and the board
     int weak_iters;     // 0 = opponent is the random mover; > 0 = plain MCTS with this many iterations
-    int weak_old;       // weak opponent uses uniform random playouts (the pre-step-6 engine)
+    int weak_playouts;  // weak opponent's playout level (smart_playouts), e.g. an older version's
     double movetime_ms; // > 0: both sides search this long per move instead of a fixed iteration count
 } MatchConfig;
 

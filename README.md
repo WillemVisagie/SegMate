@@ -1,7 +1,8 @@
 # SegMate
 
 A chess engine in C with full rules, a UCI interface, and an MCTS brain
-(UCB1 selection, capture-biased playouts) with a personality: part **Swindler**, part
+(UCB1 selection, short capture-biased playouts scored by a static evaluation)
+with a personality: part **Swindler**, part
 **Aesthete**. A random move selector is included
 baseline opponent.
 
@@ -45,12 +46,14 @@ scripts/uci_smoke.sh    # startpos bestmove legality
 scripts/perft.sh        # move generator vs known perft counts
 scripts/time_check.sh   # go movetime/wtime/nodes/infinite + stop
 scripts/book_check.sh   # opening book
+scripts/eval_check.sh   # eval symmetry (position vs colour mirror)
 ```
 
 ## Files
 
 - `src/chess.c`, `validation.c`, `fen.c` — board, move generation/legality, FEN
 - `src/search.c` — MCTS (`find_best_move()` is the engine seam)
+- `src/eval.c` — static evaluation (material, piece-square tables, pawns, king shelter, mop-up)
 - `src/book.c` — opening book (data from the CC0 Lichess chess-openings set)
 - `src/randommove.c` — random mover baseline
 - `src/uci.c`, `referee.c`, `match.c` — UCI loop, interactive game, MCTS-vs-random
