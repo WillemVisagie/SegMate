@@ -1,5 +1,6 @@
 // perft.c - Move-generator correctness check (leaf-node counts at fixed depth)
 #include <stdio.h>
+#include <stdlib.h>
 #include "chess.h"
 #include "perft.h"
 #include "validation.h"
@@ -15,6 +16,12 @@ unsigned long long perft(int depth) {
     unsigned long long nodes = 0;
     for (int i = 0; i < l.count; i++) {
         execute_move(l.moves[i]);
+        if (zobrist != compute_zobrist()) { // incremental hash must match a from-scratch one
+            char buf[8];
+            move_to_uci_string(l.moves[i], buf);
+            fprintf(stderr, "zobrist mismatch after %s\n", buf);
+            exit(1);
+        }
         nodes += perft(depth - 1);
         restore_state(&s);
     }

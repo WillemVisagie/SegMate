@@ -1,6 +1,8 @@
 #ifndef CHESS_H
 #define CHESS_H
 
+#include <stdint.h>
+
 extern char board[8][8];
 extern int move_count;
 extern int halfmove_clock;
@@ -36,7 +38,19 @@ typedef struct {
 typedef struct {
     char board[8][8];
     int stm, wk, wq, bk, bq, epr, epc, halfmove, fullmove, move_count;
+    uint64_t hash, ep_key;
 } GameState;
+
+// Zobrist hash of the current position, kept up to date by execute_move().
+// Uses the Polyglot keys, so it equals the Polyglot / python-chess hash (en
+// passant counts only when a pawn could capture). reset_zobrist() recomputes it
+// after the board is set up directly (init_board, FEN).
+extern uint64_t zobrist;
+uint64_t compute_zobrist(void);
+void reset_zobrist(void);
+// Current position already occurred since the last capture/pawn move, with
+// the same side to move (search treats this as a draw).
+int is_repetition(void);
 
 void save_state(GameState* s);
 void restore_state(const GameState* s);

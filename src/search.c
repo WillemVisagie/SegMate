@@ -41,7 +41,6 @@ typedef struct {
 } Node;
 
 // White's score (1 / 0.5 / 0) if the position is over, else -1.
-// ponytail: threefold repetition ignored inside the search (O(history) per call); add if draws matter.
 static double terminal_score(const MoveList* l) {
     if (l->count == 0) {
         if (!is_in_check(side_to_move)) return 0.5;
@@ -243,12 +242,6 @@ static Node* kept[2];
 static GameState kept_root[2];
 static long reuse_searches, reuse_hits;
 
-static int same_position(const GameState* a, const GameState* b) {
-    return memcmp(a->board, b->board, sizeof(a->board)) == 0 && a->stm == b->stm &&
-           a->wk == b->wk && a->wq == b->wq && a->bk == b->bk && a->bq == b->bq &&
-           a->epr == b->epr && a->epc == b->epc;
-}
-
 // Kept-tree node (depth 2) whose position equals `now`, or -1. Leaves the board at `now`.
 static int find_reusable(int side, const GameState* now) {
     const Node* t = kept[side];
@@ -260,9 +253,7 @@ static int find_reusable(int side, const GameState* now) {
             move_count = now->move_count; // replay above the real history, never over it
             execute_move(t[c].move);
             execute_move(t[g].move);
-            GameState s;
-            save_state(&s);
-            if (same_position(&s, now)) found = g;
+            if (zobrist == now->hash) found = g;
         }
     restore_state(now);
     return found;
@@ -352,9 +343,10 @@ Move search_best_move(const SearchLimits* lim) {
             }
         }
         restore_state(&root);
-        int n = 0;
+        int n = 0, repeated = 0;
         PathTrace trace = {start_bal, start_bal, 0};
         for (;;) {
+            if (n != 0 && is_repetition()) { repeated = 1; break; } // a repetition is a draw
             MoveList l;
             get_legal_moves(side_to_move, &l);
             if (terminal_score(&l) >= 0) break;
@@ -373,8 +365,8 @@ Move search_best_move(const SearchLimits* lim) {
             execute_move(nodes[n].move);
             trace_move(&trace, nodes[n].move, mover, root_white);
         }
-        int mated;
-        double white_score = playout(&mated);
+        int mated = 0;
+        double white_score = repeated ? 0.5 : playout(&mated);
         if (beauty_w > 0) { // Aesthete: small bonus on top of the result, from the root side's view
             double root_score = root_white ? white_score : 1 - white_score;
             double bonus = beauty_w * beauty(&trace, root_score, mated, root_white);

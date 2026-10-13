@@ -5,7 +5,8 @@
 #include "chess.h"
 
 char board[8][8];
-char history[512][8][8];
+#define HISTORY_MAX 2048
+static uint64_t history[HISTORY_MAX]; // zobrist hash after each stored position
 int move_count = 0;
 int halfmove_clock = 0;
 int fullmove_number = 1;
@@ -17,34 +18,67 @@ int black_castle_k = 1; int black_castle_q = 1;
 int ep_target_r = -1;
 int ep_target_c = -1;
 
-// Stores the current board state in the history array for threefold repetition checking.
-void store_board() {
-    if (move_count >= 512) return; 
-    for (int r = 0; r < 8; r++) {
-        for (int c = 0; c < 8; c++) {
-            history[move_count][r][c] = board[r][c];
-        }
-    }
-    move_count++;
+uint64_t zobrist;
+static uint64_t zobrist_ep; // the en passant key currently in `zobrist` (0 = none)
+
+static const uint64_t KEYS[781] = {
+#include "zobrist_keys.h"
+};
+
+static uint64_t piece_key(char p, int r, int c) {
+    static const char kinds[] = "pPnNbBrRqQkK";
+    int kind = (int)(strchr(kinds, p) - kinds);
+    return KEYS[64 * kind + 8 * (7 - r) + c];
 }
 
-// Checks if the current position has occurred 3 or more times in the history.
+static uint64_t castle_key(void) {
+    return (white_castle_k ? KEYS[768] : 0) ^ (white_castle_q ? KEYS[769] : 0) ^
+           (black_castle_k ? KEYS[770] : 0) ^ (black_castle_q ? KEYS[771] : 0);
+}
+
+// The en passant file counts only if a pawn of the side to move stands ready to capture.
+static uint64_t ep_key(void) {
+    if (ep_target_r == -1) return 0;
+    int r = ep_target_r + (side_to_move ? 1 : -1);
+    char pawn = side_to_move ? 'P' : 'p';
+    if ((ep_target_c > 0 && board[r][ep_target_c - 1] == pawn) ||
+        (ep_target_c < 7 && board[r][ep_target_c + 1] == pawn))
+        return KEYS[772 + ep_target_c];
+    return 0;
+}
+
+uint64_t compute_zobrist(void) {
+    uint64_t h = castle_key() ^ ep_key() ^ (side_to_move ? KEYS[780] : 0);
+    for (int r = 0; r < 8; r++)
+        for (int c = 0; c < 8; c++)
+            if (board[r][c] != '.') h ^= piece_key(board[r][c], r, c);
+    return h;
+}
+
+void reset_zobrist(void) {
+    zobrist = compute_zobrist();
+    zobrist_ep = ep_key();
+}
+
+// Records the current position's hash for repetition checks.
+void store_board() {
+    if (move_count >= HISTORY_MAX) return;
+    history[move_count++] = zobrist;
+}
+
+// Checks if the current position has occurred 3 or more times (only positions
+// since the last capture or pawn move can repeat).
 int check_threefold_repetition() {
     int repetitions = 0;
-    for (int i = 0; i < move_count; i++) {
-        int match = 1;
-        for (int r = 0; r < 8; r++) {
-            for (int c = 0; c < 8; c++) {
-                if (history[i][r][c] != board[r][c]) {
-                    match = 0;
-                    break;
-                }
-            }
-            if (!match) break;
-        }
-        if (match) repetitions++;
-    }
+    for (int i = move_count - 1; i >= 0 && i >= move_count - 1 - halfmove_clock; i--)
+        if (history[i] == zobrist) repetitions++;
     return repetitions >= 3;
+}
+
+int is_repetition(void) {
+    for (int i = move_count - 3; i >= 0 && i >= move_count - 1 - halfmove_clock; i -= 2)
+        if (history[i] == zobrist) return 1;
+    return 0;
 }
 
 void save_state(GameState* s) {
@@ -55,6 +89,7 @@ void save_state(GameState* s) {
     s->epr = ep_target_r; s->epc = ep_target_c;
     s->halfmove = halfmove_clock; s->fullmove = fullmove_number;
     s->move_count = move_count; // history entries below this are never modified
+    s->hash = zobrist; s->ep_key = zobrist_ep;
 }
 
 void restore_state(const GameState* s) {
@@ -65,6 +100,7 @@ void restore_state(const GameState* s) {
     ep_target_r = s->epr; ep_target_c = s->epc;
     halfmove_clock = s->halfmove; fullmove_number = s->fullmove;
     move_count = s->move_count;
+    zobrist = s->hash; zobrist_ep = s->ep_key;
 }
 
 // initialises board
@@ -93,6 +129,7 @@ void init_board() {
     black_castle_k = 1; black_castle_q = 1;
     ep_target_r = -1; ep_target_c = -1;
 
+    reset_zobrist();
     store_board();
 }
 
@@ -173,6 +210,20 @@ void undo_move(Move m, char captured_piece) {
 // actually makes move
 void execute_move(Move m) {
     char moving_piece = board[m.src_r][m.src_c];
+
+    // Zobrist: take out every square this move can touch (and the castling /
+    // en passant / side keys), then put them back in after the move.
+    int sq[4][2] = {{m.src_r, m.src_c}, {m.dst_r, m.dst_c}}, n_sq = 2;
+    if (m.src_r != m.dst_r && m.src_c != m.dst_c) { // diagonal: maybe an en passant victim (harmless if untouched)
+        sq[n_sq][0] = m.src_r; sq[n_sq++][1] = m.dst_c;
+    }
+    if ((moving_piece | 32) == 'k' && abs(m.src_c - m.dst_c) == 2) { // castling rook
+        sq[n_sq][0] = m.src_r; sq[n_sq++][1] = m.dst_c == 6 ? 7 : 0;
+        sq[n_sq][0] = m.src_r; sq[n_sq++][1] = m.dst_c == 6 ? 5 : 3;
+    }
+    uint64_t h = zobrist ^ castle_key() ^ zobrist_ep ^ (side_to_move ? KEYS[780] : 0);
+    for (int i = 0; i < n_sq; i++)
+        if (board[sq[i][0]][sq[i][1]] != '.') h ^= piece_key(board[sq[i][0]][sq[i][1]], sq[i][0], sq[i][1]);
     
     // Revoke castling rights if King or Rooks move
     if (moving_piece == 'K') { white_castle_k = 0; white_castle_q = 0; }
@@ -215,6 +266,11 @@ void execute_move(Move m) {
     // Advance side to move and (after Black) the fullmove number
     if (!side_to_move) fullmove_number++;
     side_to_move = !side_to_move;
+
+    for (int i = 0; i < n_sq; i++)
+        if (board[sq[i][0]][sq[i][1]] != '.') h ^= piece_key(board[sq[i][0]][sq[i][1]], sq[i][0], sq[i][1]);
+    zobrist_ep = ep_key();
+    zobrist = h ^ castle_key() ^ zobrist_ep ^ (side_to_move ? KEYS[780] : 0);
 
     store_board();
 }

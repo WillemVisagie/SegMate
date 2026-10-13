@@ -112,6 +112,7 @@ int set_board_from_fen(const char* fen) {
     // Reset repetition history. A position loaded from FEN has occurred once:
     // earlier positions in the actual game are unknown and must not count.
     move_count = 0;
+    reset_zobrist();
     store_board();
 
     return 0;

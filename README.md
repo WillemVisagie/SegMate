@@ -54,7 +54,7 @@ scripts/eval_check.sh   # eval symmetry (position vs colour mirror)
 - `src/chess.c`, `validation.c`, `fen.c` — board, move generation/legality, FEN
 - `src/search.c` — MCTS (`find_best_move()` is the engine seam)
 - `src/eval.c` — static evaluation (material, piece-square tables, pawns, king shelter, mop-up)
-- `src/book.c` — opening book (data from the CC0 Lichess chess-openings set)
+- `src/book.c` — opening book (data from the CC0 Lichess chess-openings set, keyed by Polyglot zobrist hash)
 - `src/randommove.c` — random mover baseline
 - `src/uci.c`, `referee.c`, `match.c` — UCI loop, interactive game, MCTS-vs-random
 - `src/main.c` — mode dispatch

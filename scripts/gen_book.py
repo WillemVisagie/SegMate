@@ -8,25 +8,16 @@ Each named opening line is replayed; every (position, next move) pair becomes a
 book entry weighted by how many lines pass through it (lines whose name
 contains "Gambit" count 3x, to suit the engine's taste for sacrifices).
 Entries lighter than MIN_WEIGHT / MIN_SHARE are dropped.
-The position key is FNV-1a over the first 3 FEN fields (placement, side,
-castling) and must match position_key() in src/book.c.
+The position key is the Polyglot zobrist hash, which src/chess.c computes with
+the same keys.
 """
 import collections, io, re, urllib.request
-import chess
+import chess, chess.polyglot
 
 URL = "https://raw.githubusercontent.com/lichess-org/chess-openings/master/%s.tsv"
 GAMBIT_WEIGHT = 3
 MIN_WEIGHT = 3      # drop rarely-named side lines (e.g. 1.e4 c5 2.a4)...
 MIN_SHARE = 0.05    # ...and moves under this share of their position's total weight
-
-def fnv1a(s):
-    h = 0xcbf29ce484222325
-    for b in s.encode():
-        h = ((h ^ b) * 0x100000001b3) & 0xFFFFFFFFFFFFFFFF
-    return h
-
-def key(board):
-    return " ".join(board.fen().split()[:3])
 
 weights = collections.defaultdict(lambda: collections.defaultdict(int))
 lines = 0
@@ -38,7 +29,7 @@ for vol in "abcde":
         board = chess.Board()
         for san in re.sub(r"\d+\.", " ", pgn).split():
             move = board.parse_san(san)  # raises if the line is illegal
-            weights[fnv1a(key(board))][move.uci()] += w
+            weights[chess.polyglot.zobrist_hash(board)][move.uci()] += w
             board.push(move)
         lines += 1
 
