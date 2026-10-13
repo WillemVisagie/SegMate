@@ -31,7 +31,6 @@ static void send_id(void) {
     printf("id name %s\n", ENGINE_NAME);
     printf("id author %s\n", ENGINE_AUTHOR);
     printf("option name OwnBook type check default true\n");
-    printf("option name Swindle type spin default 0 min 0 max 100\n");
     printf("option name Beauty type spin default 50 min 0 max 100\n");
     printf("uciok\n");
     fflush(stdout);
@@ -248,11 +247,10 @@ static int handle_command(const char* line) {
         init_board();
     } else if (strcmp(cmd, "setoption") == 0) {
         stop_search();
-        // setoption name <OwnBook|Swindle|Beauty> value <v>; other options are ignored.
+        // setoption name <OwnBook|Beauty> value <v>; other options are ignored.
         const char* value = args ? strstr(args, "value") : NULL;
         if (args != NULL && value != NULL) {
             if (strstr(args, "OwnBook") != NULL) book_enabled = strstr(value, "false") == NULL;
-            else if (strstr(args, "Swindle") != NULL) swindle_pct = atoi(value + 5);
             else if (strstr(args, "Beauty") != NULL) beauty_pct = atoi(value + 5);
         }
     } else if (strcmp(cmd, "position") == 0) {

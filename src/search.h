@@ -6,17 +6,12 @@
 // Number of MCTS iterations per move.
 extern int mcts_iterations;
 
-// Personality knobs (UCI options Swindle / Beauty); 0 disables each.
-// The final move is always chosen by a reply check (best value against about
-// the best reply among well-explored moves), not just the most visited.
-//  swindle_pct: only when the root looks worse, any move within
-//    swindle_pct/500 (x how bad it looks) of the reply-check value may be
-//    picked instead if its replies are worse for the opponent on average
-//    (traps). Off by default: it cost strength against MCTS opponents.
+// The final move is chosen by a reply check (best value against about the
+// best reply among well-explored moves), not just the most visited.
+// Personality knob (UCI option Beauty; 0 disables it):
 //  beauty_pct: max bonus x1000 added to a playout result for the root side's
 //    sacrifices that pay off, under-promotions that don't lose, and mates with
 //    few pieces. It never changes win/draw/loss ordering at sane values.
-extern int swindle_pct;
 extern int beauty_pct;
 
 // Playout policy, for A/B tests against older versions: 0 = uniform random to

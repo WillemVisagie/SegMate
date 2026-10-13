@@ -15,11 +15,11 @@ static Move engine_move(const MatchConfig* cfg) {
 }
 
 static Move weak_move(const MatchConfig* cfg) {
-    int sw = swindle_pct, bt = beauty_pct, bk = book_enabled, it = mcts_iterations, sp = smart_playouts;
-    swindle_pct = 0; beauty_pct = 0; book_enabled = 0; mcts_iterations = cfg->weak_iters;
+    int bt = beauty_pct, bk = book_enabled, it = mcts_iterations, sp = smart_playouts;
+    beauty_pct = 0; book_enabled = 0; mcts_iterations = cfg->weak_iters;
     smart_playouts = cfg->weak_playouts;
     Move m = engine_move(cfg);
-    swindle_pct = sw; beauty_pct = bt; book_enabled = bk; mcts_iterations = it; smart_playouts = sp;
+    beauty_pct = bt; book_enabled = bk; mcts_iterations = it; smart_playouts = sp;
     return m;
 }
 

@@ -15,7 +15,6 @@
 #include "validation.h"
 
 int mcts_iterations = 2000;
-int swindle_pct = 0;
 int beauty_pct = 50;
 int smart_playouts = 2;
 int playout_plies = 4;
@@ -31,8 +30,6 @@ int search_stop_requested(void) { return atomic_load(&stop_flag); }
 #define PV_MAX 8
 #define PLAYOUT_MAX_PLIES 150
 #define REPLY_CHECK_T 0.01 // opponent temperature of the final reply check (~ best reply)
-#define SWINDLE_FROM 0.45  // root value below which Swindle starts to act...
-#define SWINDLE_FULL 0.25  // ...and where it reaches full strength
 #define CUTOFF_PAWNS 5 // smart playouts: material lead that counts as a win
 
 typedef struct {
@@ -98,7 +95,7 @@ static double playout(int* mated) {
     return smart_playouts >= 2 ? eval_score() : smart_playouts ? material_score(material_balance(1)) : 0.5;
 }
 
-// --- Swindler / Aesthete helpers -------------------------------------------
+// --- Aesthete helpers -------------------------------------------
 
 static int piece_value(char p) {
     switch (p | 32) { // lowercase
@@ -162,13 +159,6 @@ static double beauty(const PathTrace* t, double root_score, int mated, int root_
     return b;
 }
 
-// How much the Swindler may act, 0..1: not at all when level or better (root
-// value at or above SWINDLE_FROM), fully at SWINDLE_FULL and below.
-static double swindle_weight(double root_value) {
-    double w = (SWINDLE_FROM - root_value) / (SWINDLE_FROM - SWINDLE_FULL);
-    return w < 0 ? 0 : w > 1 ? 1 : w;
-}
-
 // Expected value of root child `c` for us if the opponent picks its reply by
 // softmax over the replies' values (for them) at temperature `temp`.
 static double reply_value(const Node* nodes, int c, double temp) {
@@ -184,21 +174,10 @@ static double reply_value(const Node* nodes, int c, double temp) {
     return ev / total;
 }
 
-// How trappy root child `c` is: our average value over its replies, as if the
-// opponent picked one at random.
-static double trap_value(const Node* nodes, int c) {
-    double sum = 0;
-    int k = 0;
-    for (int r = nodes[c].first_child; r != -1; r = nodes[r].next_sibling, k++)
-        sum += 1 - nodes[r].wins / nodes[r].visits;
-    return k ? sum / k : nodes[c].wins / nodes[c].visits;
-}
-
 // Final move, among well-explored root moves. Reply check: the best value
 // against (nearly) the best reply, a 2-ply minimax over the tree's statistics,
-// which is much stronger than just the most-visited move. Swindler: any move
-// within `margin` of that value may be picked instead if it is trappier.
-static int pick_move(const Node* nodes, int max_visits, double margin) {
+// which is much stronger than just the most-visited move.
+static int pick_move(const Node* nodes, int max_visits) {
     int best = -1;
     double best_v = -1;
     for (int c = nodes[0].first_child; c != -1; c = nodes[c].next_sibling) {
@@ -206,15 +185,7 @@ static int pick_move(const Node* nodes, int max_visits, double margin) {
         double v = reply_value(nodes, c, REPLY_CHECK_T);
         if (v > best_v) { best_v = v; best = c; }
     }
-    if (margin <= 0) return best;
-    int trap = best;
-    double trap_v = trap_value(nodes, best);
-    for (int c = nodes[0].first_child; c != -1; c = nodes[c].next_sibling) {
-        if (nodes[c].visits * 4 < max_visits || reply_value(nodes, c, REPLY_CHECK_T) < best_v - margin) continue;
-        double t = trap_value(nodes, c);
-        if (t > trap_v) { trap_v = t; trap = c; }
-    }
-    return trap;
+    return best;
 }
 
 static int select_child(const Node* nodes, int n) {
@@ -405,15 +376,11 @@ Move search_best_move(const SearchLimits* lim) {
     int best = -1;
     for (int c = nodes[0].first_child; c != -1; c = nodes[c].next_sibling)
         if (best == -1 || nodes[c].visits > nodes[best].visits) best = c;
-    double margin = 0;
-    if (best != -1) {
-        margin = swindle_weight(nodes[best].wins / nodes[best].visits) * swindle_pct / 500.0;
-        best = pick_move(nodes, nodes[best].visits, margin);
-    }
+    if (best != -1) best = pick_move(nodes, nodes[best].visits);
     if (lim->info) {
         print_info(nodes, best, i, plat_now_ms() - start);
-        if (swindle_pct > 0 || beauty_w > 0)
-            printf("info string swindle margin %.3f, avg beauty bonus %.4f\n", margin, i ? beauty_sum / i : 0.0);
+        if (beauty_w > 0)
+            printf("info string avg beauty bonus %.4f\n", i ? beauty_sum / i : 0.0);
         printf("info string tree reuse: kept %d of the previous tree, hits %ld/%ld\n", reused, reuse_hits, reuse_searches);
     }
     Move result = best == -1 ? root_moves.moves[0] : nodes[best].move;

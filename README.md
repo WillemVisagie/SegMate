@@ -2,8 +2,7 @@
 
 A chess engine in C with full rules, a UCI interface, and an MCTS brain
 (UCB1 selection, short capture-biased playouts scored by a static evaluation)
-with a personality: part **Swindler**, part
-**Aesthete**. A random move selector is included
+with an **Aesthete** streak. A random move selector is included as a
 baseline opponent.
 
 ## Build & run
@@ -17,17 +16,11 @@ make                    # build bin/segmate (needs gcc/clang + make)
 
 ## Personality
 
-- **Swindler** (`Swindle`, 0-100, default 0 = off): only when the position
-  looks worse, it may pick a slightly lower-rated move if the opponent's
-  replies to it are worse on average, i.e. one where only a few replies hold.
-  The bound is `Swindle/500` of win probability, scaled by how bad it looks.
-  Against MCTS opponents it has cost strength in every form tried, so it is
-  opt-in.
 - **Aesthete** (`Beauty`, 0-100, default 50; 0 = off): a small bonus for
   sacrifices that pay off, under-promotions that don't lose, and mates with few
   pieces. It never outweighs a win.
 
-Both are UCI options. Regardless of them, the final move is picked by a reply
+`Beauty` is a UCI option. The final move is picked by a reply
 check: among well-explored moves, the best against (about) the opponent's best
 reply, a 2-ply minimax over the tree's statistics. It scored ~79% against the
 same engine picking the most-visited move.
@@ -37,8 +30,8 @@ same engine picking the most-visited move.
 ```bash
 scripts/mock_match.sh                  # 2 games, watch every move
 ./bin/segmate --match N [--watch]      # N games vs random, alternating colours
-./bin/segmate --match N --weak 200 --iters 200 --swindle 0 --beauty 0 --nobook
-                                       # vs plain MCTS; A/B the personality settings
+./bin/segmate --match N --weak 200 --iters 200 --beauty 0 --nobook
+                                       # vs plain MCTS; A/B the settings
 scripts/ab.sh 400 --weak 1000 --iters 1000 --nobook   # same, in parallel on all cores, with score +- SE
 ```
 

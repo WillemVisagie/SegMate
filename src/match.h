@@ -11,8 +11,8 @@ typedef struct {
 } MatchConfig;
 
 // Plays cfg->games engine-vs-opponent games (alternating colours) and prints results.
-// The engine uses the current search settings (mcts_iterations, swindle_pct, ...).
-// The weak opponent is plain MCTS: no swindle, no beauty, no book.
+// The engine uses the current search settings (mcts_iterations, beauty_pct, ...).
+// The weak opponent is plain MCTS: no beauty, no book.
 void run_match(const MatchConfig* cfg);
 
 #endif
