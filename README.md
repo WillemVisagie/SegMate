@@ -17,16 +17,20 @@ make                    # build bin/segmate (needs gcc/clang + make)
 
 ## Personality
 
-- **Swindler** (`Swindle`, 0-100, default 40; 0 = off): after the search, it
-  re-picks among the well-explored moves assuming a *fallible* opponent who
-  chooses replies by softmax over their value instead of always the best one,
-  so it prefers moves where only a few replies hold. It runs cooler when
-  winning and hotter when losing.
+- **Swindler** (`Swindle`, 0-100, default 0 = off): only when the position
+  looks worse, it may pick a slightly lower-rated move if the opponent's
+  replies to it are worse on average, i.e. one where only a few replies hold.
+  The bound is `Swindle/500` of win probability, scaled by how bad it looks.
+  Against MCTS opponents it has cost strength in every form tried, so it is
+  opt-in.
 - **Aesthete** (`Beauty`, 0-100, default 50; 0 = off): a small bonus for
   sacrifices that pay off, under-promotions that don't lose, and mates with few
   pieces. It never outweighs a win.
 
-Both are UCI options. With both at 0 it is plain MCTS.
+Both are UCI options. Regardless of them, the final move is picked by a reply
+check: among well-explored moves, the best against (about) the opponent's best
+reply, a 2-ply minimax over the tree's statistics. It scored ~79% against the
+same engine picking the most-visited move.
 
 ## MCTS vs random
 

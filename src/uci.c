@@ -31,7 +31,7 @@ static void send_id(void) {
     printf("id name %s\n", ENGINE_NAME);
     printf("id author %s\n", ENGINE_AUTHOR);
     printf("option name OwnBook type check default true\n");
-    printf("option name Swindle type spin default 40 min 0 max 100\n");
+    printf("option name Swindle type spin default 0 min 0 max 100\n");
     printf("option name Beauty type spin default 50 min 0 max 100\n");
     printf("uciok\n");
     fflush(stdout);
