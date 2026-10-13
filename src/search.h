@@ -6,6 +6,19 @@
 // Number of MCTS iterations per move.
 extern int mcts_iterations;
 
+// Personality knobs (UCI options Swindle / Beauty); 0 disables each, giving
+// plain MCTS.
+//  swindle_pct: base temperature x100 of the fallible-opponent model. After
+//    the search, among well-explored root moves, it picks the one with the best
+//    expected value if the opponent picks replies by softmax over their value at
+//    this temperature instead of always the best one, so it prefers moves where
+//    only a few replies hold. It adapts: cooler when winning, hotter when losing.
+//  beauty_pct: max bonus x1000 added to a playout result for the root side's
+//    sacrifices that pay off, under-promotions that don't lose, and mates with
+//    few pieces. It never changes win/draw/loss ordering at sane values.
+extern int swindle_pct;
+extern int beauty_pct;
+
 typedef struct {
     double time_ms;   // > 0: stop after this many milliseconds
     long iterations;  // > 0: stop after this many MCTS iterations ("nodes")

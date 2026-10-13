@@ -14,10 +14,12 @@
 #include <time.h>
 #include "chess.h"
 #include "fen.h"
+#include "book.h"
 #include "match.h"
 #include "perft.h"
 #include "platform.h"
 #include "referee.h"
+#include "search.h"
 #include "uci.h"
 
 static void print_usage(void) {
@@ -28,7 +30,7 @@ static void print_usage(void) {
     printf("                       is piped (e.g. by a chess GUI)\n");
     printf("  segmate --uci        Speak the UCI protocol on stdin\n");
     printf("  segmate --referee    Force the interactive referee menu\n");
-    printf("  segmate --match [N] [--watch]  Play N MCTS-vs-random games (default 10), optionally printing every move\n");
+    printf("  segmate --match [N] [--watch] [--weak ITERS] [--iters N] [--swindle P] [--beauty P] [--nobook]\n                       Play N games vs the random mover (or plain MCTS with ITERS iterations)\n");
     printf("  segmate --perft D [FEN]  Count legal-move tree leaves to depth D\n");
     printf("  segmate --help       Show this help\n");
 }
@@ -45,12 +47,17 @@ int main(int argc, char** argv) {
             return 0;
         }
         if (strcmp(argv[i], "--match") == 0) {
-            int watch = 0, games = 10;
+            MatchConfig cfg = {10, 0, 0};
             for (int j = i + 1; j < argc; j++) {
-                if (strcmp(argv[j], "--watch") == 0) watch = 1;
-                else games = atoi(argv[j]);
+                if (strcmp(argv[j], "--watch") == 0) cfg.watch = 1;
+                else if (strcmp(argv[j], "--weak") == 0 && j + 1 < argc) cfg.weak_iters = atoi(argv[++j]);
+                else if (strcmp(argv[j], "--iters") == 0 && j + 1 < argc) mcts_iterations = atoi(argv[++j]);
+                else if (strcmp(argv[j], "--swindle") == 0 && j + 1 < argc) swindle_pct = atoi(argv[++j]);
+                else if (strcmp(argv[j], "--beauty") == 0 && j + 1 < argc) beauty_pct = atoi(argv[++j]);
+                else if (strcmp(argv[j], "--nobook") == 0) book_enabled = 0;
+                else cfg.games = atoi(argv[j]);
             }
-            run_match(games, watch);
+            run_match(&cfg);
             return 0;
         }
         if (strcmp(argv[i], "--perft") == 0) { // --perft DEPTH [FEN]
