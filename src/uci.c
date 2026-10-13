@@ -22,7 +22,7 @@
 
 #define ENGINE_NAME    "SegMate"
 #define ENGINE_AUTHOR  "Willem Visagie"
-#define LINE_MAX       4096
+#define LINE_MAX       65536 // a position command lists every move of the game
 #define MOVE_OVERHEAD_MS 30   // safety margin for I/O and thread start-up
 #define DEFAULT_MOVES_TO_GO 30
 
@@ -84,7 +84,7 @@ static void handle_position(const char* args) {
     // parse_move already accepts that format, and execute_move advances every
     // piece of state (castling, en passant, 50-move, side, fullmove, history).
     if (moves_str != NULL && *moves_str != '\0') {
-        char moves[1024];
+        static char moves[LINE_MAX];
         strncpy(moves, moves_str, sizeof(moves) - 1);
         moves[sizeof(moves) - 1] = '\0';
 
@@ -114,7 +114,7 @@ typedef struct {
 static void parse_go(const char* args, GoParams* g) {
     *g = (GoParams){-1, -1, -1, -1, -1, -1, -1, 0};
     if (args == NULL) return;
-    char buf[LINE_MAX];
+    static char buf[LINE_MAX];
     strncpy(buf, args, sizeof(buf) - 1);
     buf[sizeof(buf) - 1] = '\0';
     char* save = NULL;
@@ -225,7 +225,7 @@ static int handle_command(const char* line) {
     if (*line == '\0' || *line == '\n') return 0;
 
     // Tokenize: first word is the command, the rest is its argument tail.
-    char buf[LINE_MAX];
+    static char buf[LINE_MAX];
     strncpy(buf, line, sizeof(buf) - 1);
     buf[sizeof(buf) - 1] = '\0';
     buf[strcspn(buf, "\r\n")] = '\0';
@@ -281,7 +281,7 @@ void uci_main(void) {
     init_board();
     setvbuf(stdout, NULL, _IONBF, 0); // Unbuffered: GUIs parse line by line.
 
-    char line[LINE_MAX];
+    static char line[LINE_MAX];
     while (fgets(line, sizeof(line), stdin) != NULL) {
         if (handle_command(line)) break;
     }
