@@ -267,25 +267,83 @@ void get_pseudo_legal_moves(int is_white, MoveList* move_list) {
     }
 }
 
+// What legality testing needs to know about the side to move, computed once
+// per position: king square, check, and which own pieces are pinned to the king.
+typedef struct {
+    int kr, kc, in_check;
+    unsigned long long pinned; // bit r*8+c
+} KingInfo;
+
+static void king_info(int is_white, KingInfo* k) {
+    char king_char = is_white ? 'K' : 'k';
+    k->kr = k->kc = -1;
+    k->pinned = 0;
+    for (int i = 0; i < 64 && k->kr == -1; i++)
+        if (board[i / 8][i % 8] == king_char) { k->kr = i / 8; k->kc = i % 8; }
+    if (k->kr == -1) { k->in_check = 0; return; }
+    k->in_check = is_square_attacked(k->kr, k->kc, !is_white);
+
+    // A pin: walking out from the king, one own piece then an enemy slider on that line.
+    int dr[] = {-1, 1, 0, 0, -1, -1, 1, 1};
+    int dc[] = {0, 0, -1, 1, -1, 1, -1, 1};
+    for (int d = 0; d < 8; d++) {
+        int r = k->kr, c = k->kc, own = -1;
+        for (;;) {
+            r += dr[d]; c += dc[d];
+            if (r < 0 || r >= 8 || c < 0 || c >= 8) break;
+            char p = board[r][c];
+            if (p == '.') continue;
+            if (is_own(p, is_white)) {
+                if (own != -1) break;
+                own = r * 8 + c;
+                continue;
+            }
+            char up = p & ~32; // uppercase
+            if (own != -1 && (up == 'Q' || (d < 4 ? up == 'R' : up == 'B')))
+                k->pinned |= 1ULL << own;
+            break;
+        }
+    }
+}
+
+// Only king moves, pinned pieces, en passant and moves out of check can expose
+// the king; everything else is legal without making the move.
+static int is_legal(Move m, int is_white, const KingInfo* k) {
+    char piece = board[m.src_r][m.src_c];
+    int is_king = (piece | 32) == 'k';
+    int is_ep = (piece | 32) == 'p' && m.dst_r == ep_target_r && m.dst_c == ep_target_c;
+    if (!k->in_check && !is_king && !is_ep && !(k->pinned >> (m.src_r * 8 + m.src_c) & 1)) return 1;
+    if (k->kr == -1) return 1;
+    char captured = execute_move_with_capture(m);
+    int legal = is_king ? !is_square_attacked(m.dst_r, m.dst_c, !is_white)
+                        : !is_square_attacked(k->kr, k->kc, !is_white);
+    undo_move(m, captured);
+    return legal;
+}
+
 // get all legal moves
 void get_legal_moves(int is_white, MoveList* move_list) {
     MoveList pseudo;
     get_pseudo_legal_moves(is_white, &pseudo);
+    KingInfo k;
+    king_info(is_white, &k);
     move_list->count = 0;
+    for (int i = 0; i < pseudo.count; i++)
+        if (is_legal(pseudo.moves[i], is_white, &k))
+            move_list->moves[move_list->count++] = pseudo.moves[i];
+}
 
-    for (int i = 0; i < pseudo.count; i++) {
-        Move m = pseudo.moves[i];
-        
-        char captured = execute_move_with_capture(m);
-        
-        if (!is_in_check(is_white)) {
-            if (move_list->count < 1024) {
-                move_list->moves[move_list->count++] = m;
-            }
-        }
-        
-        undo_move(m, captured);
+int random_legal_move(int is_white, Move* out) {
+    MoveList l;
+    get_pseudo_legal_moves(is_white, &l);
+    KingInfo k;
+    king_info(is_white, &k);
+    while (l.count > 0) { // pick at random, drop illegal picks until one sticks
+        int i = rand() % l.count;
+        if (is_legal(l.moves[i], is_white, &k)) { *out = l.moves[i]; return 1; }
+        l.moves[i] = l.moves[--l.count];
     }
+    return 0;
 }
 
 // checks if a move is legal
