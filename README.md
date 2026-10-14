@@ -1,8 +1,9 @@
 # SegMate
 
 A chess engine in C with full rules, a UCI interface, and an MCTS brain
-(UCB1 selection, short capture-biased playouts scored by a static evaluation)
-with an **Aesthete** streak. A random move selector is included as a
+(PUCT selection steered by eval priors, short capture-biased playouts scored by
+a static evaluation, and a short alpha-beta search that vetoes tactical
+blunders) with an **Aesthete** streak. A random move selector is included as a
 baseline opponent.
 
 ## Build & run
