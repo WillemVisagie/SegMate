@@ -19,6 +19,8 @@ extern int beauty_pct;
 // 2 (default) = like 1 but stops after playout_plies and scores by evaluate().
 extern int smart_playouts;
 extern int playout_plies;
+// Steer the tree by the eval: children get priors from it (PUCT selection).
+extern int use_priors;
 
 typedef struct {
     double time_ms;   // > 0: stop after this many milliseconds

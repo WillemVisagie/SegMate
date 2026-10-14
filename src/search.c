@@ -18,6 +18,7 @@ int mcts_iterations = 2000;
 int beauty_pct = 50;
 int smart_playouts = 2;
 int playout_plies = 4;
+int use_priors = 1;
 
 static atomic_int stop_flag;
 void search_clear_stop(void) { atomic_store(&stop_flag, 0); }
@@ -25,7 +26,9 @@ void search_request_stop(void) { atomic_store(&stop_flag, 1); }
 int search_stop_requested(void) { return atomic_load(&stop_flag); }
 
 #define UCB_C 1.41
-#define MAX_NODES (1 << 20) // pool cap for time/infinite searches (~60MB virtual)
+#define MAX_NODES (1 << 22) // pool cap (~240MB virtual, touched only as used)
+#define PUCT_C 1.5         // priors: exploration weight
+#define PRIOR_T 0.1        // priors: softmax temperature over the children's eval values
 #define INFO_INTERVAL_MS 1000
 #define PV_MAX 8
 #define PLAYOUT_MAX_PLIES 150
@@ -38,6 +41,7 @@ typedef struct {
     int mover_white;    // who played `move`
     int visits;
     double wins;        // from the mover's point of view (draw = 0.5)
+    float value, prior; // priors: eval of the position after `move` for the mover, and its policy share
 } Node;
 
 // White's score (1 / 0.5 / 0) if the position is over, else -1.
@@ -164,9 +168,10 @@ static double beauty(const PathTrace* t, double root_score, int mated, int root_
 static double reply_value(const Node* nodes, int c, double temp) {
     double vmax = -1e9, total = 0, ev = 0;
     for (int r = nodes[c].first_child; r != -1; r = nodes[r].next_sibling)
-        if (nodes[r].wins / nodes[r].visits > vmax) vmax = nodes[r].wins / nodes[r].visits;
+        if (nodes[r].visits && nodes[r].wins / nodes[r].visits > vmax) vmax = nodes[r].wins / nodes[r].visits;
     if (vmax == -1e9) return nodes[c].wins / nodes[c].visits;
     for (int r = nodes[c].first_child; r != -1; r = nodes[r].next_sibling) {
+        if (!nodes[r].visits) continue;
         double v = nodes[r].wins / nodes[r].visits, w = exp((v - vmax) / temp);
         total += w;
         ev += w * (1 - v);
@@ -189,14 +194,38 @@ static int pick_move(const Node* nodes, int max_visits) {
 }
 
 static int select_child(const Node* nodes, int n) {
-    double lnN = log(nodes[n].visits);
+    double lnN = log(nodes[n].visits), sqrtN = sqrt(nodes[n].visits);
     int best = -1;
     double best_v = -1;
     for (int c = nodes[n].first_child; c != -1; c = nodes[c].next_sibling) {
-        double v = nodes[c].wins / nodes[c].visits + UCB_C * sqrt(lnN / nodes[c].visits);
+        const Node* x = &nodes[c];
+        double v = use_priors
+            ? (x->visits ? x->wins / x->visits : x->value) + PUCT_C * x->prior * sqrtN / (1 + x->visits)
+            : x->wins / x->visits + UCB_C * sqrt(lnN / x->visits);
         if (v > best_v) { best_v = v; best = c; }
     }
     return best;
+}
+
+// Priors: adds all of n's moves as unvisited children, each valued by the eval
+// after it (mover's view) and given a softmax share of the exploration.
+static void expand_all(Node* nodes, int* used, int n, const MoveList* l, int mover) {
+    GameState s;
+    save_state(&s);
+    double total = 0;
+    int first = *used;
+    for (int i = 0; i < l->count; i++) {
+        execute_move(l->moves[i]);
+        double white = eval_score();
+        restore_state(&s);
+        int c = (*used)++;
+        nodes[c] = (Node){l->moves[i], n, -1, nodes[n].first_child, 0, mover, 0, 0, 0, 0};
+        nodes[c].value = mover ? white : 1 - white;
+        nodes[n].first_child = c;
+        total += nodes[c].prior = exp(nodes[c].value / PRIOR_T);
+    }
+    for (int c = first; c < *used; c++) nodes[c].prior /= total;
+    nodes[n].n_children = l->count;
 }
 
 // Prints a UCI info line: PV = `best` (-1 = most visited root move) then the
@@ -293,8 +322,7 @@ Move search_best_move(const SearchLimits* lim) {
     // the search, else the fixed default.
     int bounded_by_time = lim->time_ms > 0 || lim->infinite;
     long cap = lim->iterations > 0 ? lim->iterations
-             : bounded_by_time ? MAX_NODES - 1 : mcts_iterations;
-    if (cap > MAX_NODES - 1) cap = MAX_NODES - 1;
+             : bounded_by_time ? 1L << 40 : mcts_iterations;
 
     GameState root;
     save_state(&root);
@@ -306,7 +334,8 @@ Move search_best_move(const SearchLimits* lim) {
         reused = subtree_size(kept[root_white], reuse);
         if (reused > MAX_NODES / 2) reuse = -1, reused = 0;
     }
-    long pool = cap + reused + 1;
+    // Priors add all children at once, about one expansion per two iterations.
+    long pool = (cap > MAX_NODES ? MAX_NODES : cap) * (use_priors ? 24 : 1) + reused + 1;
     if (pool > MAX_NODES) pool = MAX_NODES;
     Node* nodes = malloc(sizeof(Node) * pool);
     if (!nodes) return root_moves.moves[0];
@@ -315,11 +344,10 @@ Move search_best_move(const SearchLimits* lim) {
         copy_subtree(kept[root_white], reuse, nodes, &used, -1);
         reuse_hits++;
     } else {
-        nodes[used++] = (Node){none, -1, -1, -1, 0, 0, 0, 0};
+        nodes[used++] = (Node){none, -1, -1, -1, 0, 0, 0, 0, 0, 0};
     }
     free(kept[root_white]);
     kept[root_white] = NULL;
-    if (cap > pool - used) cap = pool - used;
 
     int start_bal = material_balance(root_white);
     double beauty_w = beauty_pct / 1000.0, beauty_sum = 0;
@@ -344,10 +372,17 @@ Move search_best_move(const SearchLimits* lim) {
             get_legal_moves(side_to_move, &l);
             if (terminal_score(&l) >= 0) break;
             int mover = side_to_move;
-            if (nodes[n].n_children < l.count) { // expand next untried move
+            if (use_priors) {
+                if (nodes[n].n_children == 0) { // leaf: play out on its first visit, expand on the next
+                    if (n != 0 && nodes[n].visits == 0) break;
+                    if (used + l.count > pool) break; // pool full: keep evaluating leaves
+                    expand_all(nodes, &used, n, &l, mover);
+                }
+            } else if (nodes[n].n_children < l.count) { // expand next untried move
+                if (used >= pool) break;
                 Move m = l.moves[nodes[n].n_children++];
                 int c = used++;
-                nodes[c] = (Node){m, n, -1, nodes[n].first_child, 0, mover, 0, 0};
+                nodes[c] = (Node){m, n, -1, nodes[n].first_child, 0, mover, 0, 0, 0, 0};
                 nodes[n].first_child = c;
                 execute_move(m);
                 trace_move(&trace, m, mover, root_white);
