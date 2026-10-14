@@ -31,7 +31,7 @@ static void print_usage(void) {
     printf("                       is piped (e.g. by a chess GUI)\n");
     printf("  segmate --uci        Speak the UCI protocol on stdin\n");
     printf("  segmate --referee    Force the interactive referee menu\n");
-    printf("  segmate --match [N] [--watch] [--weak ITERS] [--iters N] [--beauty P] [--nobook]\n                       [--movetime MS] [--playouts L] [--weak-playouts L] [--plies N] [--priors 0|1] [--weak-priors 0|1]\n                       Play N games vs the random mover (or plain MCTS with ITERS iterations)\n");
+    printf("  segmate --match [N] [--watch] [--weak ITERS] [--iters N] [--beauty P] [--nobook]\n                       [--movetime MS] [--playouts L] [--weak-playouts L] [--plies N] [--abshare P] [--priors 0|1] [--weak-priors 0|1]\n                       Play N games vs the random mover (or plain MCTS with ITERS iterations)\n");
     printf("  segmate --perft D [FEN]  Count legal-move tree leaves to depth D\n");
     printf("  segmate --eval FEN   Static eval (cp, White's view) and that of the colour mirror\n");
     printf("  segmate --help       Show this help\n");
@@ -49,7 +49,7 @@ int main(int argc, char** argv) {
             return 0;
         }
         if (strcmp(argv[i], "--match") == 0) {
-            MatchConfig cfg = {10, 0, 0, 0, 2, 0};
+            MatchConfig cfg = {10, 0, 0, 0, 0, 2, 0};
             for (int j = i + 1; j < argc; j++) {
                 if (strcmp(argv[j], "--watch") == 0) cfg.watch = 1;
                 else if (strcmp(argv[j], "--weak") == 0 && j + 1 < argc) cfg.weak_iters = atoi(argv[++j]);
@@ -58,7 +58,9 @@ int main(int argc, char** argv) {
                 else if (strcmp(argv[j], "--weak-playouts") == 0 && j + 1 < argc) cfg.weak_playouts = atoi(argv[++j]);
                 else if (strcmp(argv[j], "--playouts") == 0 && j + 1 < argc) smart_playouts = atoi(argv[++j]);
                 else if (strcmp(argv[j], "--plies") == 0 && j + 1 < argc) playout_plies = atoi(argv[++j]);
+                else if (strcmp(argv[j], "--abshare") == 0 && j + 1 < argc) ab_share = atoi(argv[++j]);
                 else if (strcmp(argv[j], "--priors") == 0 && j + 1 < argc) use_priors = atoi(argv[++j]);
+                else if (strcmp(argv[j], "--weak-abshare") == 0 && j + 1 < argc) cfg.weak_abshare = atoi(argv[++j]);
                 else if (strcmp(argv[j], "--weak-priors") == 0 && j + 1 < argc) cfg.weak_priors = atoi(argv[++j]);
                 else if (strcmp(argv[j], "--movetime") == 0 && j + 1 < argc) cfg.movetime_ms = atof(argv[++j]);
                 else if (strcmp(argv[j], "--nobook") == 0) book_enabled = 0;

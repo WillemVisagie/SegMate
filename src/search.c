@@ -71,6 +71,130 @@ static int insufficient_material(void) {
 static double material_score(int bal) { return 0.02 + 0.96 / (1 + pow(10, -bal / 4.0)); }
 static double eval_score(void) { return 0.02 + 0.96 / (1 + pow(10, -evaluate() / 400.0)); }
 
+// --- Root alpha-beta (tactical veto) ---------------------------------------
+// MCTS samples, so it can miss a single refutation. After it, a short
+// alpha-beta checks its move: if another move is at least VETO_CP better at
+// the last fully searched depth, that move is played instead.
+// Scores are centipawns from the side to move's view.
+#define MATE_CP 30000
+#define AB_INF (MATE_CP + 1000)
+#define QS_MAX_DEPTH 8
+#define VETO_CP 100
+#define AB_FIXED_DEPTH 3 // depth when the search has no time limit
+
+int ab_share = 50;
+static double ab_deadline;
+static long ab_nodes;
+static int ab_abort;
+
+// Sets ab_abort when the deadline passes or a stop arrives (checked every 1024 nodes).
+static int ab_out_of_time(void) {
+    if (!ab_abort && (++ab_nodes & 1023) == 0 && (plat_now_ms() > ab_deadline || search_stop_requested()))
+        ab_abort = 1;
+    return ab_abort;
+}
+
+// Gain of a capture/promotion for move ordering, 0 for a quiet move.
+static int capture_gain(Move m) {
+    static const int v[26] = {['p' - 'a'] = 100, ['n' - 'a'] = 320, ['b' - 'a'] = 330,
+                              ['r' - 'a'] = 500, ['q' - 'a'] = 900};
+    char victim = board[m.dst_r][m.dst_c], mover = board[m.src_r][m.src_c] | 32;
+    int g = victim != '.' ? v[(victim | 32) - 'a'] * 16 - v[mover - 'a'] / 16 : 0; // MVV-LVA
+    if (victim == '.' && mover == 'p' && m.src_c != m.dst_c) g = 100 * 16; // en passant
+    if (m.promo != '\0') g += (v[(m.promo | 32) - 'a'] - 100) * 16;
+    return g;
+}
+
+// Orders l's moves by capture_gain, best first. Keeps only gains > 0 if
+// captures_only. Returns the new count.
+static int order_moves(MoveList* l, int captures_only) {
+    int key[1024], n = 0;
+    for (int i = 0; i < l->count; i++) {
+        int g = capture_gain(l->moves[i]);
+        if (captures_only && g <= 0) continue;
+        Move m = l->moves[i];
+        int j = n++;
+        for (; j > 0 && key[j - 1] < g; j--) { key[j] = key[j - 1]; l->moves[j] = l->moves[j - 1]; }
+        key[j] = g; l->moves[j] = m;
+    }
+    return l->count = n;
+}
+
+static int stm_eval(void) { return side_to_move ? evaluate() : -evaluate(); }
+
+// Capture-only search with stand pat (checks are not handled).
+static int qsearch(int alpha, int beta, int depth) {
+    if (ab_out_of_time()) return 0;
+    int stand = stm_eval();
+    if (stand >= beta || depth == 0) return stand;
+    if (stand > alpha) alpha = stand;
+    MoveList l;
+    get_legal_moves(side_to_move, &l);
+    order_moves(&l, 1);
+    GameState s;
+    save_state(&s);
+    for (int i = 0; i < l.count; i++) {
+        execute_move(l.moves[i]);
+        int v = -qsearch(-beta, -alpha, depth - 1);
+        restore_state(&s);
+        if (v >= beta) return v;
+        if (v > alpha) alpha = v;
+    }
+    return alpha;
+}
+
+// Full-width alpha-beta to `depth`, then qsearch.
+static int ab_search(int depth, int alpha, int beta) {
+    if (depth == 0) return qsearch(alpha, beta, QS_MAX_DEPTH);
+    if (ab_out_of_time()) return 0;
+    MoveList l;
+    get_legal_moves(side_to_move, &l);
+    if (l.count == 0) return is_in_check(side_to_move) ? -MATE_CP - depth : 0; // sooner mate = bigger
+    if (halfmove_clock >= 100) return 0;
+    order_moves(&l, 0);
+    GameState s;
+    save_state(&s);
+    for (int i = 0; i < l.count; i++) {
+        execute_move(l.moves[i]);
+        int v = -ab_search(depth - 1, -beta, -alpha);
+        restore_state(&s);
+        if (v >= beta) return v;
+        if (v > alpha) alpha = v;
+    }
+    return alpha;
+}
+
+// Iterative deepening over the root moves until `deadline` (ms) or max_depth.
+// Returns the move to play: `mcts` unless a move beats it by VETO_CP.
+static Move root_veto(const MoveList* root, Move mcts, double deadline, int max_depth, int info) {
+    ab_deadline = deadline; ab_nodes = 0; ab_abort = 0;
+    Move play = mcts;
+    GameState s;
+    save_state(&s);
+    for (int d = 1; d <= max_depth; d++) {
+        execute_move(mcts);
+        int vm = -ab_search(d - 1, -AB_INF, AB_INF), alpha = vm + VETO_CP - 1, best = -1;
+        restore_state(&s);
+        for (int i = 0; i < root->count && !ab_abort; i++) {
+            Move m = root->moves[i];
+            if (memcmp(&m, &mcts, sizeof m) == 0) continue;
+            execute_move(m);
+            int v = -ab_search(d - 1, -AB_INF, -alpha);
+            restore_state(&s);
+            if (v > alpha && !ab_abort) { alpha = v; best = i; }
+        }
+        if (ab_abort) break;
+        play = best == -1 ? mcts : root->moves[best];
+        if (info) {
+            char a[8], b[8];
+            move_to_uci_string(mcts, a);
+            move_to_uci_string(play, b);
+            printf("info string veto depth %d: %s %d, plays %s %d\n", d, a, vm, b, best == -1 ? vm : alpha);
+        }
+    }
+    return play;
+}
+
 // Plays semi-random moves and returns White's score. *mated = 1 if it ended in
 // checkmate. Level 0: uniform random to the end (or the ply cap). Level 1+:
 // captures/promotions preferred, stop once material swings by CUTOFF_PAWNS from
@@ -353,11 +477,12 @@ Move search_best_move(const SearchLimits* lim) {
     double beauty_w = beauty_pct / 1000.0, beauty_sum = 0;
 
     double start = plat_now_ms(), last_info = start;
+    double mcts_ms = lim->time_ms * (100 - ab_share) / 100; // the rest is for the veto
     long i;
     for (i = 0; i < cap; i++) {
         if (i > 0 && (i & 15) == 0) { // poll the clock/stop flag every 16 iterations
             double t = plat_now_ms();
-            if (search_stop_requested() || (lim->time_ms > 0 && t - start >= lim->time_ms)) break;
+            if (search_stop_requested() || (lim->time_ms > 0 && t - start >= mcts_ms)) break;
             if (lim->info && t - last_info >= INFO_INTERVAL_MS) {
                 print_info(nodes, -1, i, t - start);
                 last_info = t;
@@ -419,6 +544,9 @@ Move search_best_move(const SearchLimits* lim) {
         printf("info string tree reuse: kept %d of the previous tree, hits %ld/%ld\n", reused, reuse_hits, reuse_searches);
     }
     Move result = best == -1 ? root_moves.moves[0] : nodes[best].move;
+    if (ab_share > 0 && !search_stop_requested() && !lim->infinite)
+        result = root_veto(&root_moves, result, lim->time_ms > 0 ? start + lim->time_ms : 1e300,
+                           lim->time_ms > 0 ? 64 : AB_FIXED_DEPTH, lim->info);
     Node* shrunk = realloc(nodes, sizeof(Node) * used); // keep the tree for the next search
     kept[root_white] = shrunk ? shrunk : nodes;
     kept_root[root_white] = root;

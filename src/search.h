@@ -21,6 +21,8 @@ extern int smart_playouts;
 extern int playout_plies;
 // Steer the tree by the eval: children get priors from it (PUCT selection).
 extern int use_priors;
+// Percent of a timed search given to the root alpha-beta veto (0 = off).
+extern int ab_share;
 
 typedef struct {
     double time_ms;   // > 0: stop after this many milliseconds
